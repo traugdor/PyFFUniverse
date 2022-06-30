@@ -1,6 +1,7 @@
 import PySimpleGUI as sg
 import requests
 import json
+import time
 
 XIVAPIBaseURL = "https://xivapi.com/item/"
 DCURL = "https://xivapi.com/servers/dc"
@@ -13,7 +14,8 @@ marketableU = "marketable"
 marketableItems = []
 itemDictionary = []
 printableItems = []
-allItemsResponse = {};
+allItemsResponse = {}
+itemDB = json.loads('[]')
 
 #print=sg.Print
 def open_about(layout):
@@ -92,11 +94,43 @@ def switchLanguage(window,Lang):
         ]
         window["-ITEMLIST-"].update(values=printableItems)
 
+def gatherMarketInfo(dataCenter):
+    global marketableItems
+    global itemDictionary
+    global printableItems
+    global allItemsResponse
+    global itemDB
+    sg.Print("Loading market data. . .")
+    try:
+        with open("PyFFUniverse.idb", "r") as dbFile:
+            itemDB = json.load(dbFile)
+    except:
+        sg.Print("This is the first time you have run PyFFUniverse. This operation may take some time.")
+        #try:
+        with open("PyFFUniverse.idb", "w") as idb:
+            counter = 0
+            for mItem in marketableItems:
+                sg.Print(mItem)
+                #load data from Universalis
+                url = UbaseUrl+dataCenter+'/'+str(mItem)
+                data = json.loads(requests.get(url).text)
+                print("Appending data...")
+                itemDB.append(data)
+                print("done. Sleeping for 50 ms")
+                time.sleep(0.05)
+                counter += 1
+                print(counter)
+                if counter == 10:
+                    break
+            json.dump(itemDB, idb)
+    sg.Print("Done. You may close this window.")
+
 def main():
     global marketableItems
     global itemDictionary
     global printableItems
     global allItemsResponse
+    global itemDB
     sg.theme("default1")
     url = UbaseUrl+marketableU
     response = json.loads(requests.get(url).text)
@@ -206,9 +240,10 @@ def main():
             try:
                 DCResponse = json.loads(requests.get(DCURL).text)
                 servers = DCResponse[str(values["ddlDC"])]
-                print(servers)
+                #print(servers)
                 window["ddlWorld"].update(values=servers);
                 window.Refresh()
+                gatherMarketInfo(str(values["ddlDC"]))
 
             except:
                 pass
