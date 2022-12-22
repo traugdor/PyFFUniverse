@@ -2,6 +2,7 @@ import PySimpleGUI as sg
 import requests
 import json
 import time
+import datetime
 
 XIVAPIBaseURL = "https://xivapi.com/item/"
 DCURL = "https://xivapi.com/servers/dc"
@@ -39,6 +40,7 @@ def switchLanguage(window,Lang):
         window["lblWorld"].update("World")
         window["lblItemList"].update("List of Items")
         window["btnSearch"].update("Search")
+        window["lblItemName"].update("Item Name:")
         itemDictionary = [
             [str(Item), allItemsResponse[str(Item)]["en"]]
             for Item in marketableItems
@@ -54,6 +56,7 @@ def switchLanguage(window,Lang):
         window["lblWorld"].update("Welt")
         window["lblItemList"].update("Artikelliste")
         window["btnSearch"].update("Suche")
+        window["lblItemName"].update("Artikelname:")
         itemDictionary = [
             [str(Item), allItemsResponse[str(Item)]["de"]]
             for Item in marketableItems
@@ -69,6 +72,7 @@ def switchLanguage(window,Lang):
         window["lblWorld"].update("世界")
         window["lblItemList"].update("詳細")
         window["btnSearch"].update("検索")
+        window["lblItemName"].update("項目名:")
         itemDictionary = [
             [str(Item), allItemsResponse[str(Item)]["ja"]]
             for Item in marketableItems
@@ -84,6 +88,7 @@ def switchLanguage(window,Lang):
         window["lblWorld"].update("Monde")
         window["lblItemList"].update("Liste des articles")
         window["btnSearch"].update("Rechercher")
+        window["lblItemName"].update("Nom de l'article:")
         itemDictionary = [
             [str(Item), allItemsResponse[str(Item)]["fr"]]
             for Item in marketableItems
@@ -100,14 +105,16 @@ def gatherMarketInfo(dataCenter):
     global printableItems
     global allItemsResponse
     global itemDB
+    x = datetime.datetime.now()
+    y = "-".join([str(x.year), str(x.month), str(x.day)])
     sg.Print("Loading market data. . .")
     try:
-        with open("PyFFUniverse.idb", "r") as dbFile:
+        with open("-".join("PyFFUniverse.mdb",y), "r") as dbFile:
             itemDB = json.load(dbFile)
     except:
         sg.Print("This is the first time you have run PyFFUniverse. This operation may take some time.")
         #try:
-        with open("PyFFUniverse.idb", "w") as idb:
+        with open("-".join("PyFFUniverse.mdb",y), "w") as idb:
             counter = 0
             for mItem in marketableItems:
                 sg.Print(mItem)
@@ -181,8 +188,22 @@ def main():
     itemDetailsColumn = [
         #[sg.Text("Debug Output:"),sg.Output(size=(60,20))],
         [
-            sg.Text("Item Name:"),
+            sg.Text("Item Name:", key="lblItemName"),
             sg.Text(size=(20,1), key="-ITEMNAME-")
+        ],
+        [
+            sg.Text("Item Description:", key="lblItemDesc")
+        ],
+        [
+            sg.Text(size=(40,5), key="-ITEMDESC-")
+        ],
+        [
+            sg.Text("Item Listings:", key="lblItemListings")
+        ],
+        [
+            sg.Listbox(
+                values = [], enable_events=True, size=(40,10),key="-ITEMLISTINGS-"
+            )
         ]
     ]
 
@@ -233,7 +254,20 @@ def main():
             #print(url)
             try:
                 itemresponse = json.loads(requests.get(url).text)
-                window["-ITEMNAME-"].update(itemresponse["Name"])
+                print(url)
+                eLang = values["ddlLanguage"]
+                if eLang == "English":
+                    window["-ITEMNAME-"].update(itemresponse["Name_en"])
+                    window["-ITEMDESC-"].update(itemresponse["Description_en"])
+                elif eLang == "Deutsch":
+                    window["-ITEMNAME-"].update(itemresponse["Name_de"])
+                    window["-ITEMDESC-"].update(itemresponse["Description_de"])
+                elif eLang == "日本語":
+                    window["-ITEMNAME-"].update(itemresponse["Name_ja"])
+                    window["-ITEMDESC-"].update(itemresponse["Description_ja"])
+                elif eLang == "Français":
+                    window["-ITEMNAME-"].update(itemresponse["Name_fr"])
+                    window["-ITEMDESC-"].update(itemresponse["Description_fr"])
             except:
                 pass
         elif event == "ddlDC":
