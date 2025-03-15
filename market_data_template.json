@@ -1,0 +1,25 @@
+{
+    "averagePrice": null,
+    "currentAveragePrice": null,
+    "itemID": null,
+    "worldID": null,
+    "lastUploadTime": null,
+    "listings": [
+        {
+            "pricePerUnit": null,
+            "quantity": null,
+            "worldName": null,
+            "lastReviewTime": null
+        }
+    ],
+    "recentHistory": [
+        {
+            "pricePerUnit": null,
+            "quantity": null,
+            "timestamp": null,
+            "worldName": null
+        }
+    ],
+    "regularSaleVelocity": null,
+    "stackSizeHistogram": null
+}
