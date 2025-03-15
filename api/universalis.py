@@ -20,6 +20,7 @@ def get_data_centers():
         if response.status_code == 200:
             # Parse the CSV data
             dc_data = {}
+            all_worlds = []
             lines = response.text.strip().split('\n')
             for line in lines[1:]:  # Skip header
                 parts = line.split(',')
@@ -29,6 +30,8 @@ def get_data_centers():
                     if dc not in dc_data:
                         dc_data[dc] = []
                     dc_data[dc].append(world)
+                    all_worlds.append(world)
+            dc_data["All"] = all_worlds
             return dc_data
         else:
             raise Exception(f"Failed to fetch data centers: HTTP Status {response.status_code}")

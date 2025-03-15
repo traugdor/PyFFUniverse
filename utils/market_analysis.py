@@ -1,7 +1,13 @@
 import requests
 import json
 import statistics
+import os
+import tkinter as tk
 from api.universalis import UNIVERSALIS_BASE_URL
+
+# Custom print function
+def custom_print(text):
+        print(f"[Market Analysis] {text}")
 
 def get_all_dc_data(item_id, data_centers):
     """
@@ -86,6 +92,23 @@ def get_world_data_in_dc(item_id, data_center):
         print(f"Error fetching world data: {e}")
         return {}
 
+def get_lowest_price_in_dc(world_data, current_world=None):
+    # Find the world with the lowest price
+    lowest_price = float('inf')
+    lowest_price_world = None
+    
+    for world, data in world_data.items():
+        if world == current_world or not data.get("listings"):
+            continue
+            
+        world_price = data["listings"][0]["pricePerUnit"]
+        
+        if world_price < lowest_price:
+            lowest_price = world_price
+            lowest_price_world = world
+            
+    return lowest_price, lowest_price_world
+
 def find_arbitrage_opportunities(item_id, current_world, data_center):
     """
     Find arbitrage opportunities for an item across worlds in a data center.
@@ -101,8 +124,9 @@ def find_arbitrage_opportunities(item_id, current_world, data_center):
     try:
         # Get market data for all worlds in the data center
         world_data = get_world_data_in_dc(item_id, data_center)
-        
-        if not world_data or current_world not in world_data:
+
+        # Handle current_world = "All"
+        if current_world == "All":
             return None
         
         # Get the current world's lowest price
@@ -111,22 +135,37 @@ def find_arbitrage_opportunities(item_id, current_world, data_center):
             return None
             
         current_world_price = current_world_data["listings"][0]["pricePerUnit"]
+        current_dc_lowest_price, current_dc_lowest_price_world = get_lowest_price_in_dc(world_data, current_world)
+        #custom_print(f"Current world: {current_world}, Current price: {current_world_price}, DC lowest price: {current_dc_lowest_price}, DC lowest price world: {current_dc_lowest_price_world}")
+
+        dc_data = {}
+        for dc in ["Aether", "Primal", "Crystal", "Dynamis"]:
+            if dc != data_center:
+                dc_world_data = get_world_data_in_dc(item_id, dc)
+                dc_lowest_price, dc_lowest_price_world = get_lowest_price_in_dc(dc_world_data, current_world)
+                dc_data[dc] = {
+                    "dc_name": dc,
+                    "dc_lowest_price": dc_lowest_price,
+                    "dc_lowest_price_world": dc_lowest_price_world
+                }
+                #custom_print(f"DC: {dc}, DC lowest price: {dc_lowest_price}, DC lowest price world: {dc_lowest_price_world}")
         
-        # Find the world with the lowest price
-        lowest_price = float('inf')
-        lowest_price_world = None
-        lowest_price_listing = None
-        
-        for world, data in world_data.items():
-            if world == current_world or not data.get("listings"):
-                continue
-                
-            world_price = data["listings"][0]["pricePerUnit"]
-            
-            if world_price < lowest_price:
-                lowest_price = world_price
-                lowest_price_world = world
-                lowest_price_listing = data["listings"][0]
+        dc_data[data_center] = {
+            "dc_name": data_center,
+            "dc_lowest_price": current_dc_lowest_price,
+            "dc_lowest_price_world": current_dc_lowest_price_world
+        }
+
+        # find lowest price across all DCs
+        lowest_price = current_world_price
+        lowest_price_world = current_world
+        lowest_price_dc = data_center
+        for dc in dc_data:
+            if dc_data[dc]["dc_lowest_price"] < lowest_price:
+                lowest_price = dc_data[dc]["dc_lowest_price"]
+                lowest_price_world = dc_data[dc]["dc_lowest_price_world"]
+                lowest_price_dc = dc_data[dc]["dc_name"]
+                custom_print(f"Lowest price found in {dc}: {lowest_price} gil in {lowest_price_world}")
         
         # Check if there's a significant price difference (at least 10%)
         if lowest_price_world and lowest_price < current_world_price * 0.9:
@@ -138,6 +177,7 @@ def find_arbitrage_opportunities(item_id, current_world, data_center):
                 "current_world": current_world,
                 "current_price": current_world_price,
                 "lowest_price_world": lowest_price_world,
+                "lowest_price_dc": lowest_price_dc,
                 "lowest_price": lowest_price,
                 "potential_profit": potential_profit,
                 "profit_percentage": profit_percentage,
