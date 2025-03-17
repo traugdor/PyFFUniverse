@@ -19,6 +19,7 @@ from utils.settings import load_settings, save_settings
 from utils.data_processing import create_item_dictionary, filter_items_by_search
 from plyer import notification
 from win10toast import ToastNotifier
+from win11toast import ToastNotifier as ToastNotifier11
 
 class PyFFUniverseApp:
     def __init__(self, root):
@@ -968,10 +969,39 @@ class PyFFUniverseApp:
         except Exception as e:
             messagebox.showerror(get_text("app.error", "Error"), f"{get_text('app.error_delete', 'An error occurred while deleting the alert:')} {str(e)}")
 
-class MyToastNotifier(ToastNotifier):
-    def __init__(self):
-        super().__init__()
+import platform
 
-    def on_destroy(self, hwnd, msg, wparam, lparam):
-        super().on_destroy(hwnd, msg, wparam, lparam)
-        return 0
+if check_os() not in ["Linux","macOS"]:
+    version_info = platform.version()
+    major_version = int(version_info.split('.')[0])
+
+    if major_version == 10:
+        class MyToastNotifier(ToastNotifier):
+            def __init__(self):
+                super().__init__()
+
+            def on_destroy(self, hwnd, msg, wparam, lparam):
+                super().on_destroy(hwnd, msg, wparam, lparam)
+                return 0
+    elif major_version == 11:
+        class MyToastNotifier(ToastNotifier11):
+            def __init__(self):
+                super().__init__()
+
+            def on_destroy(self, hwnd, msg, wparam, lparam):
+                super().on_destroy(hwnd, msg, wparam, lparam)
+                return 0
+    else:
+        class MyToastNotifier():
+            def __init__(self):
+                pass
+            
+            def show_toast(self, title, message, duration=10, app_name="PyFFUniverse", toast_icon=None, toast_duration="short", toast_duration_type="short"):
+                messagebox.showinfo(title, message)
+else:
+    class MyToastNotifier():
+        def __init__(self):
+            pass
+        
+        def show_toast(self, title, message, duration=10, app_name="PyFFUniverse", toast_icon=None, toast_duration="short", toast_duration_type="short"):
+            messagebox.showinfo(title, message)
