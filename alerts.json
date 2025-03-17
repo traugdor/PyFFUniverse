@@ -1,17 +1,17 @@
 {
     "44175": [
         {
-            "uuid": "cadbb09e-2891-4169-9ee0-7fdd4c21b74e",
+            "uuid": "6f5ac703-3ef1-4389-8067-50d41d0455b9",
             "item_name": "Roast Chicken",
-            "created_at": "2025-03-17 01:17:29",
+            "created_at": "2025-03-17 13:38:15",
             "active": true,
-            "min_price": 3500,
+            "max_price": 3500,
             "world": "Jenova"
         },
         {
-            "uuid": "080cf081-dbdb-45bf-9063-31d226b1c593",
+            "uuid": "16e5b41a-d058-4b24-b32b-73205339a761",
             "item_name": "Roast Chicken",
-            "created_at": "2025-03-17 01:18:07",
+            "created_at": "2025-03-17 13:38:52",
             "active": true,
             "min_price": 1750,
             "data_center": "Primal"

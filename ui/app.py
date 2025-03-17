@@ -19,7 +19,17 @@ from utils.settings import load_settings, save_settings
 from utils.data_processing import create_item_dictionary, filter_items_by_search
 from plyer import notification
 from win10toast import ToastNotifier
-from win11toast import ToastNotifier as ToastNotifier11
+from win11toast import toast as ToastNotifier11
+
+def check_os():
+    if sys.platform == "win32":
+        return "Windows"
+    elif sys.platform == "darwin":
+        return "macOS"
+    elif sys.platform == "linux":
+        return "Linux"
+    else:
+        return "Unknown"
 
 class PyFFUniverseApp:
     def __init__(self, root):
@@ -143,16 +153,6 @@ class PyFFUniverseApp:
         """
         Monitor active alerts and check for price changes.
         """
-        def check_os():
-            if sys.platform == "win32":
-                return "Windows"
-            elif sys.platform == "darwin":
-                return "macOS"
-            elif sys.platform == "linux":
-                return "Linux"
-            else:
-                return "Unknown"
-        
         all_alerts = check_all_alerts()
         for alert in all_alerts:
             if check_os() == "Linux" or check_os() == "macOS":
