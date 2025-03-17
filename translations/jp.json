@@ -4,7 +4,7 @@
         "search": "検索",
         "language": "言語",
         "data_center": "データセンター",
-        "world": "ワールド",
+        "world": "ホームワールド",
         "loading": "読み込み中...",
         "error": "エラー",
         "no_item": "アイテムが選択されていません",
@@ -64,7 +64,9 @@
         "show_trend": "トレンドラインを表示",
         "show_avg": "平均価格を表示",
         "sale_history": "販売履歴",
-        "view_sales": "このアイテムの最近の販売と数量傾向を表示します。"
+        "view_sales": "このアイテムの最近の販売と数量傾向を表示します。",
+        "all_alerts": "すべてのアラート",
+        "view_alerts": "すべてのアクティブなアラートを表示します。"
     },
     "alerts": {
         "set_alert": "アラートを設定",
@@ -73,6 +75,7 @@
         "max_price_alert": "最高価格アラート",
         "active_alerts": "アクティブなアラート：",
         "no_alerts": "このアイテムのアクティブなアラートはありません。",
+        "no_all_alerts": "アクティブなアラートはありません。",
         "alert_set": "アラートが設定されました",
         "alert_set_info": "価格アラート：",
         "alert_set_info2": "が設定されました。",

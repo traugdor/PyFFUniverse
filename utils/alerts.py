@@ -1,6 +1,9 @@
 import json
 import os
 import datetime
+import sys
+import uuid
+from api.universalis import get_market_data
 
 # Path to the alerts file
 ALERTS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'alerts.json')
@@ -59,6 +62,7 @@ def set_alert(item_id, item_name, min_price=None, max_price=None, world=None, da
         
         # Create alert object
         alert = {
+            "uuid": str(uuid.uuid4()),
             "item_name": item_name,
             "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "active": True
@@ -88,17 +92,6 @@ def set_alert(item_id, item_name, min_price=None, max_price=None, world=None, da
         if item_id_str not in alerts:
             alerts[item_id_str] = []
         
-        # Check if a similar alert already exists
-        for i, existing_alert in enumerate(alerts[item_id_str]):
-            if (existing_alert.get("min_price") == alert.get("min_price") and
-                existing_alert.get("max_price") == alert.get("max_price") and
-                existing_alert.get("world") == alert.get("world") and
-                existing_alert.get("data_center") == alert.get("data_center")):
-                # Update the existing alert
-                alerts[item_id_str][i] = alert
-                save_alerts(alerts)
-                return True
-        
         # Add the new alert
         alerts[item_id_str].append(alert)
         
@@ -127,7 +120,7 @@ def get_alerts_for_item(item_id):
         print(f"Error getting alerts for item: {e}")
         return []
 
-def delete_alert(item_id, alert_index):
+def delete_alert(item_id, alert_index, uuid=None):
     """
     Delete an alert for an item.
     
@@ -140,6 +133,16 @@ def delete_alert(item_id, alert_index):
     """
     try:
         alerts = load_alerts()
+        if uuid:
+            for i, item in enumerate(alerts):
+                print(i, item)
+                for j, alert in enumerate(alerts[item]):
+                    print(j, alert)
+                    if alert["uuid"] == uuid:
+                        alerts[item].pop(j)
+                        save_alerts(alerts)
+                        return True
+
         item_id_str = str(item_id)
         
         if item_id_str in alerts and 0 <= alert_index < len(alerts[item_id_str]):
@@ -186,4 +189,49 @@ def check_alerts(item_id, current_price):
         return triggered_alerts
     except Exception as e:
         print(f"Error checking alerts: {e}")
+        return []
+
+def check_all_alerts():
+    """
+    Check all active alerts and return triggered alerts.
+    
+    Returns:
+        list: List of triggered alerts
+    """
+    try:
+        alerts = load_alerts()
+        triggered_alerts = []
+        
+        for item_id, alerts in alerts.items():
+            for alert in alerts:
+                if not alert.get("active", True):
+                    continue
+                
+                min_price = alert.get("min_price",0)
+                max_price = alert.get("max_price",sys.maxsize)
+                source = "All"
+                if alert.get("world"):
+                    source = alert.get("world")
+                elif alert.get("data_center"):
+                    source = alert.get("data_center")
+                if source == "All":
+                    source = "all data centers and servers"
+
+                #get prices from market data
+                market_data = get_market_data(item_id, source)
+                listings = market_data["listings"]
+                not_alerted = True
+                for listing in listings:
+                    if (listing["pricePerUnit"] < min_price or listing["pricePerUnit"] > max_price) and not_alerted:
+                        new_alert = {}
+                        new_alert["item_name"] = alert["item_name"]
+                        new_alert["pricePerUnit"] = listing["pricePerUnit"]
+                        new_alert["source"] = source
+                        new_alert["direction"] = "over" if listing["pricePerUnit"] > max_price else "under" if listing["pricePerUnit"] < min_price else "the same as"
+                        triggered_alerts.append(new_alert)
+                        not_alerted = False
+                    
+        return triggered_alerts
+    except Exception as e:
+        print(f"Error checking all alerts: {e}")
         return []

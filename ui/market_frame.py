@@ -156,6 +156,29 @@ def create_market_frame(notebook):
     sale_history_scrollbar = ttk.Scrollbar(sale_history_list_frame, orient=tk.VERTICAL, command=sale_history_listbox.yview)
     sale_history_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
     sale_history_listbox.config(yscrollcommand=sale_history_scrollbar.set)
+
+    # All Alerts TAB
+    all_alerts_frame = ttk.Frame(notebook)
+    notebook.add(all_alerts_frame, text=get_text("market.all_alerts", "All Alerts"))
+
+    # Title and description
+    title_label = create_label(all_alerts_frame, "market.all_alerts", "All Alerts", font=("Arial", 12, "bold"))
+    title_label.pack(anchor="w", pady=(0, 10))
+    
+    description_label = create_label(all_alerts_frame, "market.view_alerts", "View all active alerts.")
+    description_label.pack(anchor="w", pady=(0, 15))
+
+    # Create active alerts listbox with scrollbar
+    all_active_alerts_listbox = tk.Listbox(all_alerts_frame, font=("Courier New", 10))
+    all_active_alerts_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    
+    all_active_alerts_scrollbar = ttk.Scrollbar(all_alerts_frame, orient=tk.VERTICAL, command=all_active_alerts_listbox.yview)
+    all_active_alerts_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    all_active_alerts_listbox.config(yscrollcommand=all_active_alerts_scrollbar.set)
+
+    # Delete alert button
+    all_delete_alert_button = create_button(all_alerts_frame, "alerts.delete_alert", "Delete Selected Alert")
+    all_delete_alert_button.pack(anchor="e", pady=(5, 0))    
     
     # Return a dictionary with all the components
     return {
@@ -173,5 +196,8 @@ def create_market_frame(notebook):
         "show_trend_var": show_trend_var,
         "show_avg_var": show_avg_var,
         "chart_placeholder": chart_placeholder,
-        "sale_history_listbox": sale_history_listbox
+        "sale_history_listbox": sale_history_listbox,
+        "all_alerts_frame": all_alerts_frame,
+        "all_active_alerts_listbox": all_active_alerts_listbox,
+        "all_delete_alert_button": all_delete_alert_button
     }

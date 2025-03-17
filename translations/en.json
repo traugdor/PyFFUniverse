@@ -4,7 +4,7 @@
         "search": "Search",
         "language": "Language",
         "data_center": "Data Center",
-        "world": "World",
+        "world": "Home World",
         "loading": "Loading...",
         "error": "Error",
         "no_item": "No Item Selected",
@@ -64,7 +64,9 @@
         "show_trend": "Show Trend Line",
         "show_avg": "Show Average Price",
         "sale_history": "Sale History",
-        "view_sales": "View recent sales and volume trends for this item."
+        "view_sales": "View recent sales and volume trends for this item.",
+        "all_alerts": "All Alerts",
+        "view_alerts": "View all active alerts."
     },
     "alerts": {
         "set_alert": "Set Alert",
@@ -73,6 +75,7 @@
         "max_price_alert": "Max Price Alert",
         "active_alerts": "Active Alerts:",
         "no_alerts": "No active alerts for this item.",
+        "no_all_alerts": "No active alerts.",
         "alert_set": "Alert Set",
         "alert_set_info": "Price alert for",
         "alert_set_info2": "has been set.",

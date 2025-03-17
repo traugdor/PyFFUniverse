@@ -1,7 +1,8 @@
 import json
 import requests
 
-def get_item_names(item_ids):
+def get_item_names(item_ids, language = None):
+
     """
     Get item names for a list of item IDs from the FFXIV Teamcraft repository.
     
@@ -11,6 +12,19 @@ def get_item_names(item_ids):
     Returns:
         dict: Dictionary mapping item IDs to item names
     """
+
+    if language is None:
+        language = "English"
+
+    lang_dict = {
+        "English": "en",
+        "Deutsch": "de",
+        "日本語": "jp",
+        "Français": "fr"
+    }
+
+    lang_code = lang_dict.get(language, "en")
+
     try:
         # Use the items.json from ffxiv-teamcraft for item names
         items_url = "https://raw.githubusercontent.com/ffxiv-teamcraft/ffxiv-teamcraft/master/libs/data/src/lib/json/items.json"
@@ -23,8 +37,8 @@ def get_item_names(item_ids):
             item_names = {}
             for item_id in item_ids:
                 item_id_str = str(item_id)
-                if item_id_str in items_data and "en" in items_data[item_id_str]:
-                    item_names[item_id] = items_data[item_id_str]["en"]
+                if item_id_str in items_data and lang_code in items_data[item_id_str]:
+                    item_names[item_id] = items_data[item_id_str][lang_code]
             
             return item_names
         else:
@@ -44,8 +58,13 @@ def create_item_dictionary(marketable_ids):
         tuple: (itemDictionary, printableItems) where itemDictionary is a list of [id, name] pairs
                and printableItems is a list of item names
     """
-    # Get item names
-    item_names = get_item_names(marketable_ids)
+    # Get item names using selected language
+    # read language from settings.json
+    language = None
+    with open("settings.json", "r") as f:
+        settings = json.load(f)
+        language = settings["language"]
+    item_names = get_item_names(marketable_ids, language)
     
     # Create the item dictionary as a list of [id, name] pairs
     item_dictionary = []

@@ -19,8 +19,7 @@ def create_item_frame(parent):
     item_details_frame.pack(fill=tk.X, pady=(0, 10))
     
     # Item name
-    name_var = tk.StringVar(value=get_text("item.select_item", "Select an item"))
-    item_name_label = ttk.Label(item_details_frame, textvariable=name_var, font=("Arial", 14, "bold"))
+    item_name_label = create_label(item_details_frame, "item.select_item", "Select an item", font=("Arial", 14, "bold"))
     item_name_label.pack(anchor="w", pady=(0, 5))
     
     # Item description - using HTMLScrolledText instead of regular Text widget
@@ -62,8 +61,7 @@ def create_item_frame(parent):
     hot_item_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
     
     # Hot item indicator
-    hot_item_var = tk.StringVar(value="")
-    hot_item_label = ttk.Label(hot_item_frame, textvariable=hot_item_var, foreground="red", font=("Arial", 9, "bold"))
+    hot_item_label = create_label(hot_item_frame, "", "", foreground="red", font=("Arial", 9, "bold"))
     hot_item_label.pack(anchor="w")
     
     # Arbitrage opportunity frame
@@ -71,8 +69,7 @@ def create_item_frame(parent):
     arbitrage_frame.pack(fill=tk.X, pady=(10, 0))
     
     # Arbitrage info
-    arbitrage_info_var = tk.StringVar(value=get_text("arbitrage.select_all", "Select 'All' worlds in a specific data center to check for arbitrage opportunities."))
-    arbitrage_info_label = ttk.Label(arbitrage_frame, textvariable=arbitrage_info_var, wraplength=500, justify="left")
+    arbitrage_info_label = create_label(arbitrage_frame, "arbitrage.select_all","Select 'All' worlds in a specific data center to check for arbitrage opportunities.", wraplength=500, justify="left")
     arbitrage_info_label.pack(fill=tk.X, padx=10, pady=10)
     
     # Check arbitrage button
@@ -82,13 +79,12 @@ def create_item_frame(parent):
     # Return a dictionary with all the components
     return {
         "frame": item_details_frame,
-        "name_var": name_var,
         "desc_html": desc_html,  # Changed from desc_text to desc_html
         "current_price_var": current_price_var,
         "avg_price_var": avg_price_var,
         "avg_volume_var": avg_volume_var,
         "avg_daily_price_var": avg_daily_price_var,
-        "hot_item_var": hot_item_var,
         "check_arbitrage_button": check_arbitrage_button,
-        "arbitrage_info_var": arbitrage_info_var
+        "hot_item_label": hot_item_label,
+        "arbitrage_info_label": arbitrage_info_label
     }

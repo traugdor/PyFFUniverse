@@ -5,16 +5,20 @@ import requests
 import datetime
 import threading
 import time
+import sys
 from api.xivapi import get_item_details
 from api.universalis import get_market_data, get_data_centers, get_marketable_items, format_listing
 from ui.item_frame import create_item_frame
+from ui.item_list import create_item_list
 from ui.market_frame import create_market_frame
-from utils.alerts import load_alerts, set_alert, delete_alert, check_alerts, get_alerts_for_item
+from utils.alerts import load_alerts, set_alert, delete_alert, get_alerts_for_item, check_all_alerts
 from utils.market_analysis import is_hot_item, find_arbitrage_opportunities, custom_print
 from utils.translations import get_text, set_language, get_language_code
 from utils.translation_widgets import create_label, create_button, create_labelframe, set_translation_key
 from utils.settings import load_settings, save_settings
 from utils.data_processing import create_item_dictionary, filter_items_by_search
+from plyer import notification
+from win10toast import ToastNotifier
 
 class PyFFUniverseApp:
     def __init__(self, root):
@@ -42,16 +46,7 @@ class PyFFUniverseApp:
         self.search_frame.pack(fill=tk.X, pady=(0, 10))
         
         # Create item listbox with scrollbar
-        item_frame = ttk.Frame(left_panel)
-        item_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self.item_listbox = tk.Listbox(item_frame, width=40, height=30)
-        self.item_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.item_listbox.bind('<<ListboxSelect>>', self.on_item_select)
-        
-        scrollbar = ttk.Scrollbar(item_frame, orient=tk.VERTICAL, command=self.item_listbox.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.item_listbox.config(yscrollcommand=scrollbar.set)
+        self.item_listbox = create_item_list(left_panel, self.on_item_select)
         
         # Create right panel for item details and market data
         right_panel = ttk.Frame(main_frame)
@@ -62,7 +57,7 @@ class PyFFUniverseApp:
         settings_frame.pack(fill=tk.X, pady=(0, 10))
         
         # Language dropdown
-        ttk.Label(settings_frame, text=get_text("app.language", "Language:")).pack(side=tk.LEFT, padx=(0, 5))
+        create_label(settings_frame, "app.language", "Language:").pack(side=tk.LEFT, padx=(0, 5))
         languages = ["English", "Deutsch", "日本語", "Français"]
         self.language_var = tk.StringVar(value=self.settings["language"])
         language_combo = ttk.Combobox(settings_frame, textvariable=self.language_var, values=languages, state="readonly", width=10)
@@ -70,7 +65,7 @@ class PyFFUniverseApp:
         language_combo.bind("<<ComboboxSelected>>", self.on_language_change)
         
         # Data center dropdown
-        ttk.Label(settings_frame, text=get_text("app.data_center", "Data Center:")).pack(side=tk.LEFT, padx=(0, 5))
+        create_label(settings_frame, "app.data_center", "Data Center:").pack(side=tk.LEFT, padx=(0, 5))
         data_centers = ["Aether", "Primal", "Crystal", "Dynamis"]
         self.dc_var = tk.StringVar(value=self.settings["data_center"])
         dc_combo = ttk.Combobox(settings_frame, textvariable=self.dc_var, values=data_centers, state="readonly", width=15)
@@ -78,7 +73,7 @@ class PyFFUniverseApp:
         dc_combo.bind("<<ComboboxSelected>>", self.on_dc_change)
         
         # World dropdown
-        ttk.Label(settings_frame, text=get_text("app.world", "World:")).pack(side=tk.LEFT, padx=(0, 5))
+        create_label(settings_frame,"app.world", "World:").pack(side=tk.LEFT, padx=(0, 5))
         self.world_var = tk.StringVar(value=self.settings["world"])
         self.world_combo = ttk.Combobox(settings_frame, textvariable=self.world_var, state="readonly", width=15)
         self.world_combo.pack(side=tk.LEFT)
@@ -95,8 +90,9 @@ class PyFFUniverseApp:
         self.market_frame = create_market_frame(self.notebook)
         
         # Initialize variables for item details
-        self.item_name_var = self.item_frame["name_var"]
         self.item_desc_html = self.item_frame["desc_html"]
+        self.hot_item_var = self.item_frame["hot_item_label"]
+        self.arbitrage_info_var = self.item_frame["arbitrage_info_label"]
         
         # Initialize variables for market data
         self.listings_listbox = self.market_frame["listings_listbox"]
@@ -105,10 +101,10 @@ class PyFFUniverseApp:
         self.set_alert_button = self.market_frame["set_alert_button"]
         self.active_alerts_listbox = self.market_frame["active_alerts_listbox"]
         self.delete_alert_button = self.market_frame["delete_alert_button"]
+        self.all_active_alerts_listbox = self.market_frame["all_active_alerts_listbox"]
+        self.all_delete_alert_button = self.market_frame["all_delete_alert_button"]
         
         # Initialize variables for hot item and arbitrage
-        self.hot_item_var = self.item_frame["hot_item_var"]
-        self.arbitrage_info_var = self.item_frame["arbitrage_info_var"]
         self.check_arbitrage_button = self.item_frame["check_arbitrage_button"]
         
         # Configure the set alert button
@@ -119,6 +115,9 @@ class PyFFUniverseApp:
         
         # Configure the check arbitrage button
         self.check_arbitrage_button.config(command=self.on_check_arbitrage)
+
+        # Configure the all delete alert button
+        self.all_delete_alert_button.config(command=self.on_delete_all_alerts)
         
         # Variable to track the currently selected item
         self.current_item_id = None
@@ -128,7 +127,52 @@ class PyFFUniverseApp:
         self.alert_indices = {}
         
         # Load data
+        self.display_all_alerts()
         self.load_data()
+        self.start_alerts_monitor()
+
+    def start_alerts_monitor(self):
+        """
+        Start the alerts monitor thread.
+        """
+        self.alerts_thread = threading.Thread(target=self.alerts_monitor, daemon=True)
+        self.alerts_thread.start()
+
+    def alerts_monitor(self):
+        """
+        Monitor active alerts and check for price changes.
+        """
+        def check_os():
+            if sys.platform == "win32":
+                return "Windows"
+            elif sys.platform == "darwin":
+                return "macOS"
+            elif sys.platform == "linux":
+                return "Linux"
+            else:
+                return "Unknown"
+        
+        all_alerts = check_all_alerts()
+        for alert in all_alerts:
+            if check_os() == "Linux" or check_os() == "macOS":
+                notification.notify(
+                    title="Price Alert",
+                    message=f"{alert['item_name']} is now {alert['pricePerUnit']} gil in {alert['source']} which is {alert['direction']} the your set threshhold.",
+                    timeout=10,
+                    app_name="PyFFUniverse",
+                    toast=True
+                )
+            else:
+                toast = MyToastNotifier()
+                try:
+                    toast.show_toast(
+                        "PyFFUniverse - Price Alert",
+                        f"{alert['item_name']} is now {alert['pricePerUnit']} gil in {alert['source']} which is {alert['direction']} the your set threshhold.",
+                        duration=10
+                    )
+                except TypeError as e:
+                    pass
+        time.sleep(600000)     
         
     def create_search_frame(self, parent):
         """
@@ -299,7 +343,7 @@ class PyFFUniverseApp:
         for item in items:
             self.item_listbox.insert(tk.END, item)
     
-    def on_search(self):
+    def on_search(self, event=None):
         """
         Handle search button click.
         """
@@ -332,6 +376,13 @@ class PyFFUniverseApp:
             selected_indices = self.item_listbox.curselection()
             if selected_indices:
                 self.on_item_select(None)
+            
+            # change language of individual widgets not updated by update_ui_text
+            self.item_desc_html.set_html(f"<p>{get_text('item.select_description', 'Select an item to view its description.')}</p>")
+
+            # reload data
+            self.load_data()
+
         except Exception as e:
             messagebox.showerror(get_text("errors.api_error", "Error"), f"Failed to save language setting: {e}")
     
@@ -359,112 +410,6 @@ class PyFFUniverseApp:
                 # First check if widget has a translation key
                 if hasattr(widget, '_translation_key'):
                     widget.config(text=get_text(widget._translation_key, widget._translation_default))
-                else:
-                    # Fallback to the text mapping method (backward compatibility)
-                    current_text = widget.cget('text')
-                    # Map current text to translation keys
-                    text_map = {
-                        # App general
-                        "Search:": "app.search",
-                        "Search": "app.search",
-                        "Language:": "app.language",
-                        "Data Center:": "app.data_center",
-                        "World:": "app.world",
-                        "Loading...": "app.loading",
-                        "Error": "app.error",
-                        "No Item Selected": "app.no_item",
-                        "Please select an item first.": "app.select_item",
-                        "No Price Set": "app.no_price",
-                        "Please set at least one price threshold.": "app.set_price",
-                        "No Alert Selected": "app.no_alert",
-                        "Please select an alert to delete.": "app.select_alert",
-                        "Select Data Center": "app.select_dc",
-                        "Please select a specific data center to check for arbitrage opportunities.": "app.select_dc_info",
-                        "Checking all servers for arbitrage opportunities...": "app.checking_arbitrage",
-                        
-                        # Item details
-                        "Item Details": "item.details",
-                        "Type": "item.type",
-                        "Category": "item.category",
-                        "Item Level": "item.item_level",
-                        "Required Level": "item.required_level",
-                        "Description": "item.description",
-                        "Select an item": "item.select_item",
-                        "Select an item to view its description.": "item.select_description",
-                        "Market Statistics": "item.market_statistics",
-                        "Current Price:": "item.current_price",
-                        "Avg. Price:": "item.avg_price",
-                        "Avg. Daily Volume:": "item.avg_daily_volume",
-                        "Avg. Daily Price:": "item.avg_daily_price",
-                        
-                        # Market
-                        "Listings": "market.listings",
-                        "Statistics": "market.statistics",
-                        "Current Price": "market.current_price",
-                        "Price History": "market.history",
-                        "Min Price": "market.min_price",
-                        "Max Price": "market.max_price",
-                        "Average Price": "market.avg_price",
-                        "Loading market data...": "market.loading_data",
-                        "No listings found": "market.no_listings",
-                        "HQ": "market.hq",
-                        "NQ": "market.nq",
-                        "Quantity": "market.quantity",
-                        "Total": "market.total",
-                        "Retainer": "market.retainer",
-                        "Last Update": "market.last_update",
-                        "Watched Listings": "market.watched_listings",
-                        "Current Listings": "market.current_listings",
-                        "View current market listings for this item.": "market.view_listings",
-                        "View historical price trends and predictions for this item.": "market.view_history",
-                        "Time Range": "market.time_range",
-                        "24 Hours": "market.24_hours",
-                        "7 Days": "market.7_days",
-                        "30 Days": "market.30_days",
-                        "90 Days": "market.90_days",
-                        "All Time": "market.all_time",
-                        
-                        # Alerts
-                        "Set Alert": "alerts.set_alert",
-                        "Delete Selected Alert": "alerts.delete_alert",
-                        "Min Price Alert": "alerts.min_price_alert",
-                        "Max Price Alert": "alerts.max_price_alert",
-                        "Active Alerts:": "alerts.active_alerts",
-                        "No active alerts for this item.": "alerts.no_alerts",
-                        "Alert Set": "alerts.alert_set",
-                        "Price alert for": "alerts.alert_set_info",
-                        "has been set.": "alerts.alert_set_info2",
-                        "Alert Deleted": "alerts.alert_deleted",
-                        "The alert has been deleted.": "alerts.alert_deleted_info",
-                        "Error setting alert": "alerts.alert_error",
-                        "Price Alerts": "alerts.price_alerts",
-                        "Min Price:": "alerts.min_price",
-                        "Max Price:": "alerts.max_price",
-                        
-                        # Hot items
-                        "HOT ITEM! This item sells frequently.": "hot_items.hot_item",
-                        
-                        # Arbitrage
-                        "Check All Servers": "arbitrage.check_arbitrage",
-                        "No significant price differences found between worlds.": "arbitrage.no_arbitrage",
-                        "Checking for arbitrage opportunities...": "arbitrage.loading",
-                        "Arbitrage Opportunity": "arbitrage.arbitrage_opportunity",
-                        "Select 'All' worlds in a specific data center to check for arbitrage opportunities.": "arbitrage.select_all",
-                        "HOT ITEM! Arbitrage Opportunity!": "arbitrage.hot_arbitrage",
-                        
-                        # Errors
-                        "API Error": "errors.api_error",
-                        "Failed to load data": "errors.load_error",
-                        "Search error": "errors.search_error",
-                        "Failed to load market data": "errors.market_error",
-                        "Error checking arbitrage opportunities.": "errors.error_arbitrage",
-                        "Failed to set the alert. Please check your inputs.": "errors.error_alert",
-                        "Failed to delete the alert.": "errors.error_delete"
-                    }
-                    
-                    # Update the text if it's in our mapping
-                    if current_text in text_map:
-                        widget.config(text=get_text(text_map[current_text], current_text))
         
         # Recursively process child widgets
         if hasattr(widget, 'winfo_children'):
@@ -521,6 +466,27 @@ class PyFFUniverseApp:
         Args:
             event: The event object
         """
+        language = self.language_var.get()
+        lang_codes = {
+            "English": {
+                "name": "Name_en",
+                "description": "Description_en"
+            },
+            "Deutsch": {
+                "name": "Name_de",
+                "description": "Description_de"
+            },
+            "日本語": {
+                "name": "Name_jp",
+                "description": "Description_jp"
+            },
+            "Français": {
+                "name": "Name_fr",
+                "description": "Description_fr"
+            }
+        }
+        name_code = lang_codes.get(language, "en")["name"]
+        description_code = lang_codes.get(language, "en")["description"]
         try:
             # Get the selected item
             selected_index = self.item_listbox.curselection()
@@ -556,11 +522,11 @@ class PyFFUniverseApp:
                 
                 if item_details:
                     # Create HTML description
-                    description = f"<p>{item_details['Name_en']}</p>"
+                    description = f"<p>{item_details[name_code]}</p>"
                     
                     # Add item description if available
-                    if "Description_en" in item_details:
-                        description += f"<p>{item_details['Description_en']}</p>"
+                    if description_code in item_details:
+                        description += f"<p>{item_details[description_code]}</p>"
                     
                     # Update the item description
                     self.item_desc_html.set_html(description)
@@ -573,8 +539,8 @@ class PyFFUniverseApp:
                     self.display_alerts_for_current_item()
                     
                     # Reset hot item and arbitrage indicators
-                    self.hot_item_var.set("")
-                    self.arbitrage_info_var.set("")
+                    self.hot_item_var.config( text = "")
+                    self.arbitrage_info_var.config( text = "")
                     
                     # Fetch market data in a separate thread to avoid freezing the UI
                     self.fetch_market_data(item_id, market_location)
@@ -596,6 +562,7 @@ class PyFFUniverseApp:
             # Show loading message
             self.listings_listbox.insert(tk.END, "Loading market data...")
             self.root.update_idletasks()  # Update the UI to show loading message
+            check_all_alerts()
             
             # Define a function to fetch market data in a separate thread
             def fetch_data():
@@ -667,9 +634,9 @@ class PyFFUniverseApp:
             
             # Check if the item is hot (high sale velocity)
             if is_hot_item(market_response):
-                self.hot_item_var.set(get_text("app.hot_item", "HOT ITEM! This item sells frequently."))
+                self.hot_item_var.config( text = get_text("app.hot_item", "HOT ITEM! This item sells frequently."))
             else:
-                self.hot_item_var.set("")
+                self.hot_item_var.config( text = "")
             
             # Check for arbitrage opportunities
             self.check_arbitrage_opportunities(market_response)
@@ -685,8 +652,8 @@ class PyFFUniverseApp:
         self.item_frame["avg_price_var"].set("--")
         self.item_frame["avg_volume_var"].set("--")
         self.item_frame["avg_daily_price_var"].set("--")
-        self.hot_item_var.set("")
-        self.arbitrage_info_var.set("")
+        self.hot_item_var.config( text = "")
+        self.arbitrage_info_var.config( text = "")
     
     def check_arbitrage_opportunities(self, market_response):
         """
@@ -716,14 +683,14 @@ class PyFFUniverseApp:
                 if arbitrage:
                     # Format the arbitrage information
                     message = f"{get_text('app.arbitrage', 'HOT ITEM! Arbitrage Opportunity!')} Buy from {arbitrage['lowest_price_world']}@{arbitrage['lowest_price_dc']} for {arbitrage['lowest_price']:,} gil and sell on {arbitrage['current_world']} for {arbitrage['current_price']:,} gil. Potential profit: {arbitrage['potential_profit']:,} gil ({arbitrage['profit_percentage']:.1f}%)."
-                    self.arbitrage_info_var.set(message)
+                    self.arbitrage_info_var.config( text = message)
                 else:
-                    self.arbitrage_info_var.set(get_text("app.no_arbitrage", "No significant price differences found between worlds."))
+                    self.arbitrage_info_var.config( text = get_text("app.no_arbitrage", "No significant price differences found between worlds."))
             else:
-                self.arbitrage_info_var.set(get_text("app.select_dc", "Select 'All' worlds in a specific data center to check for arbitrage opportunities."))
+                self.arbitrage_info_var.config( text = get_text("app.select_dc", "Select 'All' worlds in a specific data center to check for arbitrage opportunities."))
         except Exception as e:
             print(f"Error checking arbitrage opportunities: {e}")
-            self.arbitrage_info_var.set(f"{get_text('app.error', 'Error checking arbitrage:')} {str(e)}")
+            self.arbitrage_info_var.config( text = f"{get_text('app.error', 'Error checking arbitrage:')} {str(e)}")
     
     def show_market_error(self, error_message):
         """
@@ -755,7 +722,7 @@ class PyFFUniverseApp:
                 return
             
             # Show loading message
-            self.arbitrage_info_var.set(get_text("app.checking_arbitrage", "Checking all servers for arbitrage opportunities..."))
+            self.arbitrage_info_var.config( text = get_text("app.checking_arbitrage", "Checking all servers for arbitrage opportunities..."))
             self.root.update_idletasks()
             
             # Get arbitrage opportunities
@@ -763,7 +730,7 @@ class PyFFUniverseApp:
             if world == "All":
                 messagebox.showinfo(get_text("app.select_world", "Select World"), get_text("app.select_world_info", "Please select a specific world to check for arbitrage opportunities."))
                 return
-                
+
             arbitrage = find_arbitrage_opportunities(
                 item_id=self.current_item_id,
                 current_world=world,
@@ -773,12 +740,12 @@ class PyFFUniverseApp:
             # Display arbitrage info
             if arbitrage:
                 message = f"{get_text('app.arbitrage', 'HOT ITEM! Arbitrage Opportunity!')} Buy from {arbitrage['lowest_price_world']}@{arbitrage['lowest_price_dc']} for {arbitrage['lowest_price']:,} gil and sell on {arbitrage['current_world']} for {arbitrage['current_price']:,} gil. Potential profit: {arbitrage['potential_profit']:,} gil ({arbitrage['profit_percentage']:.1f}%)."
-                self.arbitrage_info_var.set(message)
+                self.arbitrage_info_var.config( text = message)
             else:
-                self.arbitrage_info_var.set(get_text("app.no_arbitrage", "No significant price differences found between worlds."))
+                self.arbitrage_info_var.config( text = get_text("app.no_arbitrage", "No significant price differences found between worlds."))
         except Exception as e:
             messagebox.showerror(get_text("app.error", "Error"), f"{get_text('app.error_arbitrage', 'An error occurred while checking for arbitrage opportunities:')} {str(e)}")
-            self.arbitrage_info_var.set(get_text("app.error_arbitrage", "Error checking arbitrage opportunities."))
+            self.arbitrage_info_var.config( text = get_text("app.error_arbitrage", "Error checking arbitrage opportunities."))
 
     
     def on_set_alert(self):
@@ -824,11 +791,32 @@ class PyFFUniverseApp:
                 
                 # Refresh alerts for the current item
                 self.display_alerts_for_current_item()
+                self.display_all_alerts()
             else:
                 messagebox.showerror(get_text("app.error", "Error"), get_text("app.error_alert", "Failed to set the alert. Please check your inputs."))
         except Exception as e:
             messagebox.showerror(get_text("app.error", "Error"), f"{get_text('app.error_alert', 'An error occurred while setting the alert:')} {str(e)}")
     
+    def on_delete_all_alerts(self):
+        """
+        Handle delete alerts button click from all alerts tab
+        """
+        try:
+            # Delete selected alert in all alerts tab
+            selected_index = self.all_active_alerts_listbox.curselection()
+            if not selected_index:
+                messagebox.showwarning(get_text("app.no_alert", "No Alert Selected"), get_text("app.select_alert", "Please select an alert to delete."))
+                return
+            
+            selection = selected_index[0]
+            alert_uuid = self.all_alert_uuids[selection]
+            delete_alert(self.current_item_id, 0, alert_uuid)
+            self.display_all_alerts()
+        except Exception as e:
+            messagebox.showerror(get_text("app.error", "Error"), f"{get_text('app.error_delete', 'An error occurred while deleting the alert:')} {str(e)}")
+            return
+            
+
     def display_alerts_for_current_item(self):
         """
         Display alerts for the currently selected item.
@@ -858,6 +846,62 @@ class PyFFUniverseApp:
             
             # Store the alert index
             self.alert_indices[i] = i
+
+    def display_all_alerts(self):
+        """
+        Display all active alerts.
+        """
+        # Get all alerts
+        all_alerts = load_alerts()
+        
+        # Clear the listbox and alert indices
+        self.all_active_alerts_listbox.delete(0, tk.END)
+        self.all_alert_indices = {}
+        self.all_alert_uuids = {}
+        
+        # If no alerts, show a message
+        if not all_alerts:
+            self.all_active_alerts_listbox.insert(tk.END, get_text("app.no_alerts", "No active alerts."))
+            return
+        
+        # Add each alert to the listbox
+        counter = 0
+        for i, item in enumerate(all_alerts):
+            for j, alert in enumerate(all_alerts[item]):
+                # Format the alert display text
+                parts = []
+                parts.append(f"Item: {alert['item_name']}")
+                # Add min price if set
+                if "min_price" in alert:
+                    parts.append(f"Min: {alert['min_price']:,}")
+                
+                # Add max price if set
+                if "max_price" in alert:
+                    parts.append(f"Max: {alert['max_price']:,}")
+                
+                # Add location
+                if "world" in alert:
+                    parts.append(f"World: {alert['world']}")
+                elif "data_center" in alert:
+                    parts.append(f"DC: {alert['data_center']}")
+                
+                # Add created date
+                if "created_at" in alert:
+                    parts.append(f"Created: {alert['created_at']}")
+                
+                # Add active status
+                if "active" in alert:
+                    parts.append(f"Active: {'Yes' if alert['active'] else 'No'}")
+                
+                alert_text = " | ".join(parts)
+                # Add to listbox
+                self.all_active_alerts_listbox.insert(tk.END, alert_text)
+                
+                # Store the alert index
+                self.all_alert_indices[counter] = i
+                self.all_alert_uuids[counter] = alert["uuid"]
+                counter +=1
+                
     
     def format_alert_text(self, alert):
         """
@@ -918,7 +962,16 @@ class PyFFUniverseApp:
                 
                 # Refresh the alerts display
                 self.display_alerts_for_current_item()
+                self.display_all_alerts()
             else:
                 messagebox.showerror(get_text("app.error", "Error"), get_text("app.error_delete", "Failed to delete the alert."))
         except Exception as e:
             messagebox.showerror(get_text("app.error", "Error"), f"{get_text('app.error_delete', 'An error occurred while deleting the alert:')} {str(e)}")
+
+class MyToastNotifier(ToastNotifier):
+    def __init__(self):
+        super().__init__()
+
+    def on_destroy(self, hwnd, msg, wparam, lparam):
+        super().on_destroy(hwnd, msg, wparam, lparam)
+        return 0

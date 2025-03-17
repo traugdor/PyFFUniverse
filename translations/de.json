@@ -4,7 +4,7 @@
         "search": "Suche",
         "language": "Sprache",
         "data_center": "Datenzentrum",
-        "world": "Welt",
+        "world": "Heimatwelt",
         "loading": "Wird geladen...",
         "error": "Fehler",
         "no_item": "Kein Gegenstand ausgewählt",
@@ -64,7 +64,9 @@
         "show_trend": "Trendlinie anzeigen",
         "show_avg": "Durchschnittspreis anzeigen",
         "sale_history": "Verkaufsverlauf",
-        "view_sales": "Aktuelle Verkäufe und Volumentrends für diesen Gegenstand anzeigen."
+        "view_sales": "Aktuelle Verkäufe und Volumentrends für diesen Gegenstand anzeigen.",
+        "all_alerts": "Alle Benachrichtigungen",
+        "view_alerts": "Alle aktiven Benachrichtigungen anzeigen."
     },
     "alerts": {
         "set_alert": "Benachrichtigung festlegen",
@@ -73,6 +75,7 @@
         "max_price_alert": "Höchstpreis-Benachrichtigung",
         "active_alerts": "Aktive Benachrichtigungen:",
         "no_alerts": "Keine aktiven Benachrichtigungen für diesen Gegenstand.",
+        "no_all_alerts": "Keine aktiven Benachrichtigungen.",
         "alert_set": "Benachrichtigung festgelegt",
         "alert_set_info": "Preisbenachrichtigung für",
         "alert_set_info2": "wurde festgelegt.",
