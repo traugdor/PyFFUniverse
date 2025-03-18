@@ -1,6 +1,7 @@
 {
-    "language": "English",
-    "data_center": "Aether",
-    "world": "Jenova",
-    "lang_code": "en"
+    "language": "",
+    "data_center": "",
+    "world": "",
+    "lang_code": "",
+    "discord_webhook_url": ""
 }

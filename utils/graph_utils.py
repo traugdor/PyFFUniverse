@@ -12,20 +12,22 @@ from sklearn.linear_model import LinearRegression
 from utils.translations import get_text
 import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
+import tkinter as tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 def create_price_history_graph(history_data, time_range, show_peaks=True, show_trend=True, show_avg=True):
     """
     Create a price history graph using matplotlib.
     
     Args:
-        history_data (dict): The price history data from the Universalis API
-        time_range (str): The time range to display (e.g. "7 Days")
-        show_peaks (bool, optional): Whether to show peaks and valleys. Defaults to True.
-        show_trend (bool, optional): Whether to show trend lines. Defaults to True.
-        show_avg (bool, optional): Whether to show average price. Defaults to True.
+        history_data (dict): The price history data from Universalis API
+        time_range (str): The time range to display (e.g. "1 day", "1 week", etc.)
+        show_peaks (bool, optional): Whether to show price peaks. Defaults to True.
+        show_trend (bool, optional): Whether to show price trend. Defaults to True.
+        show_avg (bool, optional): Whether to show price average. Defaults to True.
         
     Returns:
-        tuple: (PhotoImage, dict) The graph image as a PhotoImage and a dictionary with data point information
+        tuple: (figure_canvas, data_dict) where figure_canvas is a matplotlib canvas widget and data_dict contains data points and plot area information
     """
     # Extract price history data
     timestamps = []
@@ -67,56 +69,6 @@ def create_price_history_graph(history_data, time_range, show_peaks=True, show_t
                 prices.append(entry["pricePerUnit"])
                 quantities.append(entry.get("quantity", 1))
                 worlds.append(entry.get("worldName", ""))
-    elif "sales" in history_data:
-        sales = history_data["sales"]
-        for sale in sales:
-            if "pricePerUnit" in sale and "timestamp" in sale:
-                # Convert timestamp to datetime
-                if isinstance(sale["timestamp"], int):
-                    # Convert from milliseconds to seconds if needed
-                    if sale["timestamp"] > 1000000000000:  # If timestamp is in milliseconds
-                        sale["timestamp"] = sale["timestamp"] / 1000
-                    timestamp = datetime.fromtimestamp(sale["timestamp"])
-                else:
-                    # Try to parse as ISO format
-                    try:
-                        timestamp = datetime.fromisoformat(sale["timestamp"].replace('Z', '+00:00'))
-                    except:
-                        continue
-                
-                # Skip entries outside the time range
-                if cutoff_date and timestamp < cutoff_date:
-                    continue
-                        
-                timestamps.append(timestamp)
-                prices.append(sale["pricePerUnit"])
-                quantities.append(sale.get("quantity", 1))
-                worlds.append(sale.get("worldName", ""))
-    elif "recentHistory" in history_data:
-        recent_history = history_data["recentHistory"]
-        for history in recent_history:
-            if "pricePerUnit" in history and "timestamp" in history:
-                # Convert timestamp to datetime
-                if isinstance(history["timestamp"], int):
-                    # Convert from milliseconds to seconds if needed
-                    if history["timestamp"] > 1000000000000:  # If timestamp is in milliseconds
-                        history["timestamp"] = history["timestamp"] / 1000
-                    timestamp = datetime.fromtimestamp(history["timestamp"])
-                else:
-                    # Try to parse as ISO format
-                    try:
-                        timestamp = datetime.fromisoformat(history["timestamp"].replace('Z', '+00:00'))
-                    except:
-                        continue
-                
-                # Skip entries outside the time range
-                if cutoff_date and timestamp < cutoff_date:
-                    continue
-                        
-                timestamps.append(timestamp)
-                prices.append(history["pricePerUnit"])
-                quantities.append(history.get("quantity", 1))
-                worlds.append(history.get("worldName", ""))
 
     # If no data, return empty graph
     if not timestamps:
@@ -127,15 +79,17 @@ def create_price_history_graph(history_data, time_range, show_peaks=True, show_t
         ax.set_ylabel(get_text("market.price", "Price"))
         ax.set_title(get_text("market.price_history", "Price History"))
         
-        # Convert to PhotoImage
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=100)
-        buf.seek(0)
-        img = Image.open(buf)
-        img_tk = ImageTk.PhotoImage(img)
-        plt.close()
+        # Store the plot area for interactive features
+        bbox = ax.get_position()
+        plot_area = {
+            'x0': bbox.x0,
+            'y0': bbox.y0,
+            'x1': bbox.x1,
+            'y1': bbox.y1
+        }
         
-        return img_tk, {}
+        # Return the figure and the data point information
+        return fig, {'data_points': [], 'plot_area': plot_area}
     
     # Create figure with a special layout for side legend and predictions
     fig = plt.figure(figsize=(10, 6))
@@ -341,10 +295,7 @@ def create_price_history_graph(history_data, time_range, show_peaks=True, show_t
     # Adjust layout to make room for the rotated x-axis labels
     plt.tight_layout()
     
-    # Get figure dimensions and data point coordinates
-    fig_width, fig_height = fig.get_size_inches() * fig.dpi
-    
-    # Get the main plot area coordinates in figure space
+    # Store the plot area for interactive features
     bbox = ax.get_position()
     plot_area = {
         'x0': bbox.x0,
@@ -353,16 +304,108 @@ def create_price_history_graph(history_data, time_range, show_peaks=True, show_t
         'y1': bbox.y1
     }
     
-    # Convert to PhotoImage
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=100)
-    buf.seek(0)
-    img = Image.open(buf)
-    img_tk = ImageTk.PhotoImage(img)
-    plt.close()
+    # Return the figure and the data point information
+    return fig, {'data_points': data_points, 'plot_area': plot_area}
+
+def create_chart_tooltip(chart_placeholder, chart_frame):
+    """
+    Create a tooltip for a chart.
     
-    # Return the image and the data point information
-    return img_tk, {'data_points': data_points, 'plot_area': plot_area}
+    Args:
+        chart_placeholder: The chart placeholder widget
+        chart_frame: The frame containing the chart
+        
+    Returns:
+        tuple: (tooltip widget, event binding function)
+    """
+    # Create tooltip widget
+    tooltip = tk.Label(chart_frame, text="", relief="solid", borderwidth=1, bg="lightyellow")
+    tooltip.place_forget()  # Hide initially
+    
+    # Define the motion handler function
+    def on_chart_motion(event, chart_data, tooltip):
+        try:
+            # Check if we have chart data and tooltip
+            if not chart_data:
+                return
+                
+            # Get the chart placeholder and its dimensions
+            chart_placeholder = event.widget
+            chart_width = chart_placeholder.winfo_width()
+            chart_height = chart_placeholder.winfo_height()
+            
+            # Get data points from chart data
+            data_points = chart_data.get('data_points', [])
+            if not data_points or len(data_points) == 0:
+                return
+            
+            # Get plot area from chart data
+            plot_area = chart_data.get('plot_area', {})
+            if not plot_area:
+                return
+            
+            # Check if mouse is in the plot area
+            x_rel = event.x / chart_width
+            y_rel = event.y / chart_height
+            
+            if (x_rel < plot_area['x0'] or x_rel > plot_area['x1'] or 
+                y_rel < plot_area['y0'] or y_rel > plot_area['y1']):
+                tooltip.place_forget()
+                return
+            
+            # Simple approach: divide the plot area into segments based on the number of data points
+            # and show the tooltip for the segment the mouse is hovering over
+            
+            # Calculate which segment of the plot area the mouse is in
+            plot_width = plot_area['x1'] - plot_area['x0']
+            relative_x = (x_rel - plot_area['x0']) / plot_width
+            
+            # Calculate the index based on the relative position
+            index = int(relative_x * len(data_points))
+            # Ensure index is within bounds
+            index = max(0, min(index, len(data_points) - 1))
+            
+            # Get the data point at this index
+            point = data_points[index]
+            
+            # Format the timestamp
+            timestamp_str = point['timestamp'].strftime('%Y-%m-%d %H:%M')
+            
+            # Format the price with comma as thousand separator
+            price_str = format(point['price'], ',')
+            
+            # Get the world name if available
+            world_str = point.get('world', '')
+            world_text = f" ({world_str})" if world_str else ""
+            
+            # Create tooltip text
+            tooltip_text = f"{timestamp_str}\nPrice: {price_str}{world_text}"
+            
+            # Update tooltip text and position
+            tooltip.config(text=tooltip_text)
+            
+            # Position tooltip near the cursor but ensure it stays within the window
+            tooltip_x = event.x + 10
+            tooltip_y = event.y + 10
+            
+            # Adjust position if tooltip would go off-screen
+            tooltip_width = len(tooltip_text) * 7  # Approximate width based on text length
+            tooltip_height = 40  # Approximate height
+            
+            if tooltip_x + tooltip_width > chart_width:
+                tooltip_x = event.x - tooltip_width - 10
+            
+            if tooltip_y + tooltip_height > chart_height:
+                tooltip_y = event.y - tooltip_height - 10
+            
+            tooltip.place(x=tooltip_x, y=tooltip_y)
+                
+        except Exception as e:
+            print(f"Error in chart hover detection: {e}")
+            tooltip.place_forget()
+    
+    # Return the tooltip widget and the motion handler function
+    return tooltip, on_chart_motion
 
 def get_time_range_days(time_range_text):
     """

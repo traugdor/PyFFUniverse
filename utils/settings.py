@@ -5,7 +5,9 @@ import os
 DEFAULT_SETTINGS = {
     "language": "English",
     "data_center": "North-America",
-    "world": "All"
+    "world": "All",
+    "discord_webhook_url": "",
+    "discord_alerts_enabled": False
 }
 
 # Settings file path

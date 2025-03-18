@@ -17,7 +17,8 @@ from utils.translations import get_text, set_language, get_language_code
 from utils.translation_widgets import create_label, create_button, create_labelframe, set_translation_key
 from utils.settings import load_settings, save_settings
 from utils.data_processing import create_item_dictionary, filter_items_by_search
-from utils.graph_utils import create_price_history_graph, get_time_range_days
+from utils.graph_utils import create_price_history_graph, get_time_range_days, create_chart_tooltip
+from utils.discord_webhook import send_discord_alert, save_discord_settings, load_discord_settings
 from plyer import notification
 from win10toast import ToastNotifier
 from win11toast import toast as ToastNotifier11
@@ -95,6 +96,10 @@ class PyFFUniverseApp:
         self.world_combo.pack(side=tk.LEFT)
         self.world_combo.bind("<<ComboboxSelected>>", self.on_world_change)
         
+        # Discord settings button
+        discord_button = create_button(settings_frame, "app.discord_settings", "Discord Settings", command=self.open_discord_settings)
+        discord_button.pack(side=tk.RIGHT, padx=(10, 0))
+        
         # Create item details frame
         self.item_frame = create_item_frame(right_panel)
         
@@ -146,11 +151,15 @@ class PyFFUniverseApp:
         self.display_all_alerts()
         self.load_data()
         self.start_alerts_monitor()
+        
+        # Set up close handler
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def start_alerts_monitor(self):
         """
         Start the alerts monitor thread.
         """
+        self.alerts_running = True
         self.alerts_thread = threading.Thread(target=self.alerts_monitor, daemon=True)
         self.alerts_thread.start()
 
@@ -158,27 +167,68 @@ class PyFFUniverseApp:
         """
         Monitor active alerts and check for price changes.
         """
-        all_alerts = check_all_alerts()
-        for alert in all_alerts:
-            if check_os() == "Linux" or check_os() == "macOS":
-                notification.notify(
-                    title="Price Alert",
-                    message=f"{alert['item_name']} is now {alert['pricePerUnit']} gil in {alert['source']} which is {alert['direction']} the your set threshhold.",
-                    timeout=10,
-                    app_name="PyFFUniverse",
-                    toast=True
-                )
-            else:
-                toast = MyToastNotifier()
-                try:
-                    toast.show_toast(
-                        "PyFFUniverse - Price Alert",
-                        f"{alert['item_name']} is now {alert['pricePerUnit']} gil in {alert['source']} which is {alert['direction']} the your set threshhold.",
-                        duration=10
+        while self.alerts_running:
+            all_alerts = check_all_alerts()
+            for alert in all_alerts:
+                # Create alert message
+                alert_message = f"{alert['item_name']} is now {alert['pricePerUnit']} gil in {alert['source']} which is {alert['direction']} the your set threshold."
+                
+                # Send desktop notification
+                if check_os() == "Linux" or check_os() == "macOS":
+                    notification.notify(
+                        title="Price Alert",
+                        message=alert_message,
+                        timeout=10,
+                        app_name="PyFFUniverse",
+                        toast=True
                     )
-                except TypeError as e:
-                    pass
-        time.sleep(600000)     
+                else:
+                    toast = MyToastNotifier()
+                    try:
+                        toast.show_toast(
+                            "PyFFUniverse - Price Alert",
+                            alert_message,
+                            duration=10
+                        )
+                    except TypeError as e:
+                        pass
+                
+                # Send Discord alert if configured
+                send_discord_alert(
+                    "PyFFUniverse - Price Alert",
+                    alert_message,
+                    color=0xFF5733  # Orange color
+                )
+            
+            self.alerts_sleep(600)
+
+    def alerts_sleep(self, seconds):
+        """
+        Sleep for a specified number of seconds.
+        
+        Args:
+            seconds (int): The number of seconds to sleep
+        """
+        # Get the time now
+        start_time = time.time()
+        sleep_time = 1
+        loop_start_time = start_time
+        loop_end_time = loop_start_time
+        for i in range(seconds):
+            loop_start_time = time.time()
+            if not self.alerts_running:
+                break
+            sleep_time = min(1, sleep_time - (loop_end_time - loop_start_time))
+            # If remaining time is less than 1 second, sleep for remaining time
+            if(seconds - (loop_end_time - start_time) < 1):
+                sleep_time = seconds - (loop_end_time - start_time)
+            if sleep_time < 0:
+                sleep_time = 1
+            time.sleep(sleep_time)
+            loop_end_time = time.time()
+            # if we have exceeded the sleep time, break
+            if loop_end_time - start_time > seconds:
+                break
         
     def create_search_frame(self, parent):
         """
@@ -618,7 +668,8 @@ class PyFFUniverseApp:
             if not item_id:
                 return
             
-            # Get the chart placeholder from the market frame
+            # Get the chart frame from the market frame
+            chart_frame = self.market_frame.get("chart_frame")
             chart_placeholder = self.market_frame["chart_placeholder"]
             
             # Get the selected time range
@@ -632,9 +683,14 @@ class PyFFUniverseApp:
             # Convert time range to days
             days = get_time_range_days(time_range)
             
+            # Clear previous chart if it exists and destroy the widget
+            if hasattr(self, 'chart_canvas_widget') and self.chart_canvas_widget.winfo_exists():
+                self.chart_canvas_widget.pack_forget()
+                self.chart_canvas_widget.destroy()
+                
             # Show loading message in chart placeholder
-            chart_placeholder.config(image="")
             chart_placeholder.config(text=get_text("market.loading_chart", "Loading price history..."))
+            chart_placeholder.pack(fill=tk.BOTH, expand=True)
             
             # Update the UI to show the loading message
             self.root.update_idletasks()
@@ -646,7 +702,7 @@ class PyFFUniverseApp:
             self.price_history_data = price_history_response
             
             # Create the price history graph
-            chart_image, chart_data = create_price_history_graph(
+            fig, chart_data = create_price_history_graph(
                 price_history_response, 
                 time_range, 
                 show_peaks=show_peaks, 
@@ -657,18 +713,21 @@ class PyFFUniverseApp:
             # Store the chart data for interactive features
             self.chart_data = chart_data
             
-            # Update the chart placeholder with the new image
+            # Hide the placeholder text
             chart_placeholder.config(text="")
-            chart_placeholder.config(image=chart_image)
-            chart_placeholder.image = chart_image  # Keep a reference to prevent garbage collection
+            chart_placeholder.pack_forget()
+            
+            # Create a new FigureCanvasTkAgg widget
+            self.figure_canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+            self.figure_canvas.draw()
+            self.chart_canvas_widget = self.figure_canvas.get_tk_widget()
+            self.chart_canvas_widget.pack(fill=tk.BOTH, expand=True)
             
             # Create a tooltip for the chart if it doesn't exist yet
-            if not hasattr(self, 'chart_tooltip'):
-                # Get the chart frame from the market frame
-                chart_frame = self.market_frame.get("chart_frame")
+            if not hasattr(self, 'chart_tooltip') or not hasattr(self.chart_tooltip, 'winfo_exists') or not self.chart_tooltip.winfo_exists():
                 if chart_frame:
-                    self.chart_tooltip = tk.Label(chart_frame, text="", relief="solid", borderwidth=1, bg="lightyellow")
-                    self.chart_tooltip.place_forget()  # Hide initially
+                    # Use the function from graph_utils.py to create the tooltip
+                    self.chart_tooltip, self.chart_motion_handler = create_chart_tooltip(self.chart_canvas_widget, chart_frame)
             
             # Set up event handlers for the chart options if not already done
             if not hasattr(self, "_chart_options_initialized"):
@@ -680,17 +739,15 @@ class PyFFUniverseApp:
                 self.market_frame["show_trend_var"].trace_add("write", lambda *args: self.update_price_history_chart())
                 self.market_frame["show_avg_var"].trace_add("write", lambda *args: self.update_price_history_chart())
                 
-                # Set up mouse events for the chart if tooltip exists
-                if hasattr(self, 'chart_tooltip'):
-                    chart_placeholder.bind("<Motion>", self.on_chart_motion)
-                    chart_placeholder.bind("<Leave>", lambda event: self.chart_tooltip.place_forget())
-                
                 self._chart_options_initialized = True
+            
+            # Set up mouse events for the chart
+            self.chart_canvas_widget.bind("<Motion>", lambda event: self.on_chart_motion(event))
+            self.chart_canvas_widget.bind("<Leave>", lambda event: self.chart_tooltip.place_forget())
             
         except Exception as e:
             # Show error message in chart placeholder
             chart_placeholder = self.market_frame["chart_placeholder"]
-            chart_placeholder.config(image="")
             chart_placeholder.config(text=f"Error: {str(e)}")
             print(f"Error updating price history chart: {e}")
     
@@ -701,85 +758,8 @@ class PyFFUniverseApp:
         Args:
             event: The mouse event
         """
-        try:
-            # Check if we have chart data and tooltip
-            if not hasattr(self, 'chart_data') or not self.chart_data or not hasattr(self, 'chart_tooltip'):
-                return
-                
-            # Get the chart placeholder and its dimensions
-            chart_placeholder = event.widget
-            chart_width = chart_placeholder.winfo_width()
-            chart_height = chart_placeholder.winfo_height()
-            
-            # Get data points from chart data
-            data_points = self.chart_data.get('data_points', [])
-            if not data_points or len(data_points) == 0:
-                return
-            
-            # Get plot area from chart data
-            plot_area = self.chart_data.get('plot_area', {})
-            if not plot_area:
-                return
-            
-            # Check if mouse is in the plot area
-            x_rel = event.x / chart_width
-            y_rel = event.y / chart_height
-            
-            if (x_rel < plot_area['x0'] or x_rel > plot_area['x1'] or 
-                y_rel < plot_area['y0'] or y_rel > plot_area['y1']):
-                self.chart_tooltip.place_forget()
-                return
-            
-            # Simple approach: divide the plot area into segments based on the number of data points
-            # and show the tooltip for the segment the mouse is hovering over
-            
-            # Calculate which segment of the plot area the mouse is in
-            plot_width = plot_area['x1'] - plot_area['x0']
-            relative_x = (x_rel - plot_area['x0']) / plot_width
-            
-            # Calculate the index based on the relative position
-            index = int(relative_x * len(data_points))
-            # Ensure index is within bounds
-            index = max(0, min(index, len(data_points) - 1))
-            
-            # Get the data point at this index
-            point = data_points[index]
-            
-            # Format the timestamp
-            timestamp_str = point['timestamp'].strftime('%Y-%m-%d %H:%M')
-            
-            # Format the price with comma as thousand separator
-            price_str = format(point['price'], ',')
-            
-            # Get the world name if available
-            world_str = point.get('world', '')
-            world_text = f" ({world_str})" if world_str else ""
-            
-            # Create tooltip text
-            tooltip_text = f"{timestamp_str}\nPrice: {price_str}{world_text}"
-            
-            # Update tooltip text and position
-            self.chart_tooltip.config(text=tooltip_text)
-            
-            # Position tooltip near the cursor but ensure it stays within the window
-            tooltip_x = event.x + 10
-            tooltip_y = event.y + 10
-            
-            # Adjust position if tooltip would go off-screen
-            tooltip_width = len(tooltip_text) * 7  # Approximate width based on text length
-            tooltip_height = 40  # Approximate height
-            
-            if tooltip_x + tooltip_width > chart_width:
-                tooltip_x = event.x - tooltip_width - 10
-            
-            if tooltip_y + tooltip_height > chart_height:
-                tooltip_y = event.y - tooltip_height - 10
-            
-            self.chart_tooltip.place(x=tooltip_x, y=tooltip_y)
-                
-        except Exception as e:
-            print(f"Error in chart hover detection: {e}")
-            self.chart_tooltip.place_forget()
+        if hasattr(self, 'chart_motion_handler') and hasattr(self, 'chart_data') and hasattr(self, 'chart_tooltip'):
+            self.chart_motion_handler(event, self.chart_data, self.chart_tooltip)
     
     def update_market_data(self, market_response, market_location):
         """
@@ -1176,6 +1156,99 @@ class PyFFUniverseApp:
                 messagebox.showerror(get_text("app.error", "Error"), get_text("app.error_delete", "Failed to delete the alert."))
         except Exception as e:
             messagebox.showerror(get_text("app.error", "Error"), f"{get_text('app.error_delete', 'An error occurred while deleting the alert:')} {str(e)}")
+
+    def on_close(self):
+        """
+        Handle application close event to ensure proper cleanup.
+        """
+        # Stop the alerts monitor
+        self.alerts_running = False
+
+        # Close all matplotlib figures
+        plt.close('all')
+        
+        # Destroy the root window
+        self.root.destroy()
+        
+        # Force exit if needed
+        self.root.quit()
+
+    def open_discord_settings(self):
+        """
+        Open the Discord settings window.
+        """
+        discord_settings_window = tk.Toplevel(self.root)
+        discord_settings_window.title(get_text("app.discord_settings", "Discord Settings"))
+        discord_settings_window.geometry("500x150")
+        discord_settings_window.resizable(False, False)
+        
+        # Create Discord settings form
+        discord_webhook_label = create_label(discord_settings_window, "app.discord_webhook", "Discord Webhook URL:")
+        discord_webhook_label.pack(padx=10, pady=(10, 5))
+        
+        discord_webhook_entry = tk.Entry(discord_settings_window, width=50)
+        discord_webhook_entry.insert(0, load_discord_settings())
+        discord_webhook_entry.pack(padx=10, pady=(0, 10))
+        
+        # Create help text
+        help_text = ttk.Label(discord_settings_window, text=get_text("app.discord_webhook_help", "Enter your Discord webhook URL to receive alerts in Discord."), wraplength=480)
+        help_text.pack(padx=10, pady=(0, 10))
+        
+        # Create buttons frame
+        buttons_frame = ttk.Frame(discord_settings_window)
+        buttons_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        # Create test button
+        test_button = create_button(buttons_frame, "app.test_discord", "Test", command=lambda: self.test_discord_webhook(discord_webhook_entry.get()))
+        test_button.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Create save button
+        save_button = create_button(buttons_frame, "app.save", "Save", command=lambda: self.save_discord_webhook(discord_webhook_entry.get(), discord_settings_window))
+        save_button.pack(side=tk.LEFT)
+
+    def test_discord_webhook(self, webhook_url):
+        """
+        Test the Discord webhook.
+        
+        Args:
+            webhook_url (str): The Discord webhook URL to test
+        """
+        if not webhook_url:
+            messagebox.showwarning(get_text("app.missing_webhook", "Missing Webhook URL"), get_text("app.enter_webhook", "Please enter a webhook URL."))
+            return
+            
+        # Temporarily save the webhook URL
+        save_discord_settings(webhook_url)
+        
+        # Send a test message
+        success = send_discord_alert(
+            "PyFFUniverse - Test Alert",
+            get_text("app.discord_test_message", "This is a test alert from PyFFUniverse."),
+            color=0x00FF00  # Green color
+        )
+        
+        if success:
+            messagebox.showinfo(get_text("app.test_success", "Test Successful"), get_text("app.discord_test_success", "Test message sent successfully to Discord."))
+        else:
+            messagebox.showerror(get_text("app.test_failed", "Test Failed"), get_text("app.discord_test_failed", "Failed to send test message to Discord. Please check your webhook URL."))
+
+    def save_discord_webhook(self, webhook_url, window=None):
+        """
+        Save the Discord webhook URL.
+        
+        Args:
+            webhook_url (str): The Discord webhook URL
+            window (Toplevel, optional): The window to close after saving
+        """
+        # Save the webhook URL
+        save_discord_settings(webhook_url)
+        
+        # Show success message
+        messagebox.showinfo(get_text("app.settings_saved", "Settings Saved"), get_text("app.discord_settings_saved", "Discord webhook settings have been saved."))
+        
+        # Close the window if provided
+        if window:
+            window.destroy()
 
 import platform
 
