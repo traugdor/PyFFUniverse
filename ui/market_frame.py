@@ -196,6 +196,7 @@ def create_market_frame(notebook):
         "show_trend_var": show_trend_var,
         "show_avg_var": show_avg_var,
         "chart_placeholder": chart_placeholder,
+        "chart_frame": chart_frame,
         "sale_history_listbox": sale_history_listbox,
         "all_alerts_frame": all_alerts_frame,
         "all_active_alerts_listbox": all_active_alerts_listbox,

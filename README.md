@@ -119,6 +119,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [XIVAPI](https://xivapi.com/) for item information
 - The FFXIV community for inspiration and support
 - [Plyer](https://plyer.readthedocs.io/en/latest/) for macOS notifications
-- [Win10toast](https://github.com/Debogarev/Win10toast) for Windows 10 notifications
-- [Win11toast](https://github.com/Debogarev/Win11toast) for Windows 11 notifications
+- [Win10toast](https://github.com/jithurjacob/Windows-10-Toast-Notifications) for Windows 10 notifications
+- [Win11toast](https://github.com/GitHub30/win11toast) for Windows 11 notifications
 - [Windsurf IDE by Codeium](https://codeium.com/windsurf) for code analysis and development support

@@ -25,7 +25,7 @@ class Translator:
     
     def set_language(self, language):
         """Change the current language"""
-        if language in ["en", "de", "jp", "fr"]:
+        if language in ["en", "de", "ja", "fr"]:
             self.language = language
             self.load_translations()
     
@@ -58,7 +58,7 @@ def get_language_code(language_name):
     language_map = {
         "English": "en",
         "Deutsch": "de",
-        "日本語": "jp",
+        "日本語": "ja",
         "Français": "fr"
     }
     return language_map.get(language_name, "en")

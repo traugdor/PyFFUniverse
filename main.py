@@ -1,13 +1,7 @@
 import tkinter as tk
 from ui.app import PyFFUniverseApp
-import pyuac
 
-def main():
-    # Request admin privileges
-    # if not pyuac.isUserAdmin():
-    #     pyuac.runAsAdmin()
-    #     return
-    
+def main():    
     # Create the root window
     root = tk.Tk()
     

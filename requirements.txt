@@ -1,3 +1,8 @@
 plyer
 win10toast
 win11toast
+matplotlib
+numpy
+scipy
+scikit-learn
+Pillow

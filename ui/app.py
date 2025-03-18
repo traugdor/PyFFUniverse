@@ -7,7 +7,7 @@ import threading
 import time
 import sys
 from api.xivapi import get_item_details
-from api.universalis import get_market_data, get_data_centers, get_marketable_items, format_listing
+from api.universalis import get_market_data, get_data_centers, get_marketable_items, format_listing, get_price_history
 from ui.item_frame import create_item_frame
 from ui.item_list import create_item_list
 from ui.market_frame import create_market_frame
@@ -17,9 +17,13 @@ from utils.translations import get_text, set_language, get_language_code
 from utils.translation_widgets import create_label, create_button, create_labelframe, set_translation_key
 from utils.settings import load_settings, save_settings
 from utils.data_processing import create_item_dictionary, filter_items_by_search
+from utils.graph_utils import create_price_history_graph, get_time_range_days
 from plyer import notification
 from win10toast import ToastNotifier
 from win11toast import toast as ToastNotifier11
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 def check_os():
     if sys.platform == "win32":
@@ -33,6 +37,7 @@ def check_os():
 
 class PyFFUniverseApp:
     def __init__(self, root):
+        # Create initial window
         self.root = root
         self.root.title(get_text("app.title", "PyFFUniverse"))
         self.root.geometry("1200x800")
@@ -365,6 +370,7 @@ class PyFFUniverseApp:
             
             # Save the language setting
             self.settings["language"] = language
+            self.settings["lang_code"] = get_language_code(language)
             save_settings(self.settings)
             
             # Update the language in the translator
@@ -382,6 +388,7 @@ class PyFFUniverseApp:
             self.item_desc_html.set_html(f"<p>{get_text('item.select_description', 'Select an item to view its description.')}</p>")
 
             # reload data
+            self.display_all_alerts()
             self.load_data()
 
         except Exception as e:
@@ -478,8 +485,8 @@ class PyFFUniverseApp:
                 "description": "Description_de"
             },
             "日本語": {
-                "name": "Name_jp",
-                "description": "Description_jp"
+                "name": "Name_ja",
+                "description": "Description_ja"
             },
             "Français": {
                 "name": "Name_fr",
@@ -565,6 +572,9 @@ class PyFFUniverseApp:
             self.root.update_idletasks()  # Update the UI to show loading message
             check_all_alerts()
             
+            # Update the price history chart
+            self.update_price_history_chart(item_id, market_location)
+            
             # Define a function to fetch market data in a separate thread
             def fetch_data():
                 try:
@@ -583,6 +593,194 @@ class PyFFUniverseApp:
             self.listings_listbox.delete(0, tk.END)
             self.listings_listbox.insert(tk.END, f"Error fetching market data: {str(e)}")
 
+    def update_price_history_chart(self, item_id=None, market_location=None):
+        """
+        Update the price history chart for the given item and market location.
+        If no item_id or market_location is provided, use the currently selected ones.
+        
+        Args:
+            item_id (int, optional): The ID of the item. If None, use current_item_id.
+            market_location (str, optional): The world or data center name. If None, use current market location.
+        """
+        try:
+            # Use current item and market location if not provided
+            if item_id is None:
+                item_id = self.current_item_id
+            if market_location is None:
+                # Determine market location based on settings
+                if self.settings.get("use_dc", False):
+                    market_location = self.dc_var.get()
+                else:
+                    world = self.world_var.get()
+                    market_location = world if world != "All" else self.dc_var.get()
+            
+            # If no item is selected, return
+            if not item_id:
+                return
+            
+            # Get the chart placeholder from the market frame
+            chart_placeholder = self.market_frame["chart_placeholder"]
+            
+            # Get the selected time range
+            time_range = self.market_frame["time_range_var"].get()
+            
+            # Get the chart options
+            show_peaks = self.market_frame["show_peaks_var"].get()
+            show_trend = self.market_frame["show_trend_var"].get()
+            show_avg = self.market_frame["show_avg_var"].get()
+            
+            # Convert time range to days
+            days = get_time_range_days(time_range)
+            
+            # Show loading message in chart placeholder
+            chart_placeholder.config(image="")
+            chart_placeholder.config(text=get_text("market.loading_chart", "Loading price history..."))
+            
+            # Update the UI to show the loading message
+            self.root.update_idletasks()
+            
+            # Fetch price history data
+            price_history_response = get_price_history(item_id, market_location, days)
+            
+            # Store the price history data for tooltip functionality
+            self.price_history_data = price_history_response
+            
+            # Create the price history graph
+            chart_image, chart_data = create_price_history_graph(
+                price_history_response, 
+                time_range, 
+                show_peaks=show_peaks, 
+                show_trend=show_trend, 
+                show_avg=show_avg
+            )
+            
+            # Store the chart data for interactive features
+            self.chart_data = chart_data
+            
+            # Update the chart placeholder with the new image
+            chart_placeholder.config(text="")
+            chart_placeholder.config(image=chart_image)
+            chart_placeholder.image = chart_image  # Keep a reference to prevent garbage collection
+            
+            # Create a tooltip for the chart if it doesn't exist yet
+            if not hasattr(self, 'chart_tooltip'):
+                # Get the chart frame from the market frame
+                chart_frame = self.market_frame.get("chart_frame")
+                if chart_frame:
+                    self.chart_tooltip = tk.Label(chart_frame, text="", relief="solid", borderwidth=1, bg="lightyellow")
+                    self.chart_tooltip.place_forget()  # Hide initially
+            
+            # Set up event handlers for the chart options if not already done
+            if not hasattr(self, "_chart_options_initialized"):
+                # Time range radio buttons
+                self.market_frame["time_range_var"].trace_add("write", lambda *args: self.update_price_history_chart())
+                
+                # Chart option checkboxes
+                self.market_frame["show_peaks_var"].trace_add("write", lambda *args: self.update_price_history_chart())
+                self.market_frame["show_trend_var"].trace_add("write", lambda *args: self.update_price_history_chart())
+                self.market_frame["show_avg_var"].trace_add("write", lambda *args: self.update_price_history_chart())
+                
+                # Set up mouse events for the chart if tooltip exists
+                if hasattr(self, 'chart_tooltip'):
+                    chart_placeholder.bind("<Motion>", self.on_chart_motion)
+                    chart_placeholder.bind("<Leave>", lambda event: self.chart_tooltip.place_forget())
+                
+                self._chart_options_initialized = True
+            
+        except Exception as e:
+            # Show error message in chart placeholder
+            chart_placeholder = self.market_frame["chart_placeholder"]
+            chart_placeholder.config(image="")
+            chart_placeholder.config(text=f"Error: {str(e)}")
+            print(f"Error updating price history chart: {e}")
+    
+    def on_chart_motion(self, event):
+        """
+        Handle mouse motion over the chart to show tooltips with price data.
+        
+        Args:
+            event: The mouse event
+        """
+        try:
+            # Check if we have chart data and tooltip
+            if not hasattr(self, 'chart_data') or not self.chart_data or not hasattr(self, 'chart_tooltip'):
+                return
+                
+            # Get the chart placeholder and its dimensions
+            chart_placeholder = event.widget
+            chart_width = chart_placeholder.winfo_width()
+            chart_height = chart_placeholder.winfo_height()
+            
+            # Get data points from chart data
+            data_points = self.chart_data.get('data_points', [])
+            if not data_points or len(data_points) == 0:
+                return
+            
+            # Get plot area from chart data
+            plot_area = self.chart_data.get('plot_area', {})
+            if not plot_area:
+                return
+            
+            # Check if mouse is in the plot area
+            x_rel = event.x / chart_width
+            y_rel = event.y / chart_height
+            
+            if (x_rel < plot_area['x0'] or x_rel > plot_area['x1'] or 
+                y_rel < plot_area['y0'] or y_rel > plot_area['y1']):
+                self.chart_tooltip.place_forget()
+                return
+            
+            # Simple approach: divide the plot area into segments based on the number of data points
+            # and show the tooltip for the segment the mouse is hovering over
+            
+            # Calculate which segment of the plot area the mouse is in
+            plot_width = plot_area['x1'] - plot_area['x0']
+            relative_x = (x_rel - plot_area['x0']) / plot_width
+            
+            # Calculate the index based on the relative position
+            index = int(relative_x * len(data_points))
+            # Ensure index is within bounds
+            index = max(0, min(index, len(data_points) - 1))
+            
+            # Get the data point at this index
+            point = data_points[index]
+            
+            # Format the timestamp
+            timestamp_str = point['timestamp'].strftime('%Y-%m-%d %H:%M')
+            
+            # Format the price with comma as thousand separator
+            price_str = format(point['price'], ',')
+            
+            # Get the world name if available
+            world_str = point.get('world', '')
+            world_text = f" ({world_str})" if world_str else ""
+            
+            # Create tooltip text
+            tooltip_text = f"{timestamp_str}\nPrice: {price_str}{world_text}"
+            
+            # Update tooltip text and position
+            self.chart_tooltip.config(text=tooltip_text)
+            
+            # Position tooltip near the cursor but ensure it stays within the window
+            tooltip_x = event.x + 10
+            tooltip_y = event.y + 10
+            
+            # Adjust position if tooltip would go off-screen
+            tooltip_width = len(tooltip_text) * 7  # Approximate width based on text length
+            tooltip_height = 40  # Approximate height
+            
+            if tooltip_x + tooltip_width > chart_width:
+                tooltip_x = event.x - tooltip_width - 10
+            
+            if tooltip_y + tooltip_height > chart_height:
+                tooltip_y = event.y - tooltip_height - 10
+            
+            self.chart_tooltip.place(x=tooltip_x, y=tooltip_y)
+                
+        except Exception as e:
+            print(f"Error in chart hover detection: {e}")
+            self.chart_tooltip.place_forget()
+    
     def update_market_data(self, market_response, market_location):
         """
         Update the UI with market data.
@@ -596,8 +794,16 @@ class PyFFUniverseApp:
         
         # Check if there are listings
         if "listings" in market_response and market_response["listings"]:
-            # Add header
-            self.listings_listbox.insert(tk.END, f"{'Price':^10} | {'Qty':^6} | {'Total':^10} | {'World':^10} | {'Last Updated':^20}")
+            # Add header with translations
+            header_format = get_text("market.listings_header_format", "{price} | {qty} | {total} | {world} | {last_updated}")
+            header = header_format.format(
+                price=get_text("market.price_header", "Price").center(10),
+                qty=get_text("market.quantity_header", "Qty").center(6),
+                total=get_text("market.total_header", "Total").center(10),
+                world=get_text("market.world_header", "World").center(10),
+                last_updated=get_text("market.last_updated_header", "Last Updated").center(20)
+            )
+            self.listings_listbox.insert(tk.END, header)
             self.listings_listbox.insert(tk.END, "-" * 65)
             
             # Add each listing
@@ -608,7 +814,7 @@ class PyFFUniverseApp:
             # Update market statistics
             self.update_market_statistics(market_response)
         else:
-            self.listings_listbox.insert(tk.END, "No listings found for this item.")
+            self.listings_listbox.insert(tk.END, get_text("market.no_listings", "No listings found for this item."))
             
             # Clear market statistics
             self.clear_market_statistics()
@@ -797,7 +1003,7 @@ class PyFFUniverseApp:
                 messagebox.showerror(get_text("app.error", "Error"), get_text("app.error_alert", "Failed to set the alert. Please check your inputs."))
         except Exception as e:
             messagebox.showerror(get_text("app.error", "Error"), f"{get_text('app.error_alert', 'An error occurred while setting the alert:')} {str(e)}")
-    
+
     def on_delete_all_alerts(self):
         """
         Handle delete alerts button click from all alerts tab
@@ -852,6 +1058,8 @@ class PyFFUniverseApp:
         """
         Display all active alerts.
         """
+        # get language from settings
+
         # Get all alerts
         all_alerts = load_alerts()
         

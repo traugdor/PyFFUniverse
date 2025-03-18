@@ -13,17 +13,16 @@ def get_item_names(item_ids, language = None):
         dict: Dictionary mapping item IDs to item names
     """
 
-    if language is None:
-        language = "English"
-
-    lang_dict = {
-        "English": "en",
-        "Deutsch": "de",
-        "日本語": "jp",
-        "Français": "fr"
-    }
-
-    lang_code = lang_dict.get(language, "en")
+    if language not in ["en", "de", "ja", "fr"]:
+        lang_dict = {
+            "English": "en",
+            "Deutsch": "de",
+            "日本語": "ja",
+            "Français": "fr"
+        }
+        lang_code = lang_dict.get(language, "en")
+    else:
+        lang_code = language
 
     try:
         # Use the items.json from ffxiv-teamcraft for item names
@@ -63,8 +62,8 @@ def create_item_dictionary(marketable_ids):
     language = None
     with open("settings.json", "r") as f:
         settings = json.load(f)
-        language = settings["language"]
-    item_names = get_item_names(marketable_ids, language)
+        lang_code = settings["lang_code"]
+    item_names = get_item_names(marketable_ids, lang_code)
     
     # Create the item dictionary as a list of [id, name] pairs
     item_dictionary = []
