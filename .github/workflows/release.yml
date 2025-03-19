@@ -91,6 +91,9 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v3
       
+      - name: List downloaded artifacts
+        run: ls -la
+      
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -99,8 +102,8 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            PyFFUniverse-Windows.zip/PyFFUniverse-Windows.zip
-            PyFFUniverse-Linux.zip/PyFFUniverse-Linux.zip
-            PyFFUniverse-macOS.zip/PyFFUniverse-macOS.zip
+            PyFFUniverse-Windows.zip
+            PyFFUniverse-Linux.zip
+            PyFFUniverse-macOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
