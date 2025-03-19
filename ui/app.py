@@ -170,8 +170,9 @@ class PyFFUniverseApp:
         while self.alerts_running:
             all_alerts = check_all_alerts()
             for alert in all_alerts:
+                print(f"Triggering alert for {alert['item_name']} at {alert['pricePerUnit']} gil.")
                 # Create alert message
-                alert_message = f"{alert['item_name']} is now {alert['pricePerUnit']} gil in {alert['source']} which is {alert['direction']} the your set threshold."
+                alert_message = f"{alert['item_name']} is now {alert['pricePerUnit']} gil in {alert['source']} which is {alert['direction']} your set threshold of {alert['targetPrice']} gil."
                 
                 # Send desktop notification
                 if check_os() == "Linux" or check_os() == "macOS":
@@ -199,6 +200,7 @@ class PyFFUniverseApp:
                     alert_message,
                     color=0xFF5733  # Orange color
                 )
+                print("Alerts sent.")
             
             self.alerts_sleep(600)
 

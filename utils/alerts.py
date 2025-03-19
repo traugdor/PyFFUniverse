@@ -4,6 +4,7 @@ import datetime
 import sys
 import uuid
 from api.universalis import get_market_data
+from api.xivapi import get_item_details
 
 # Path to the alerts file
 ALERTS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'alerts.json')
@@ -219,17 +220,33 @@ def check_all_alerts():
 
                 #get prices from market data
                 market_data = get_market_data(item_id, source)
+                item_details = get_item_details(item_id)
+                
+                require_HQ = False
+                if item_details and "CanBeHq" in item_details:
+                    require_HQ = item_details["CanBeHq"] == 1 # require HQ if it can be HQ and is craftable
                 listings = market_data["listings"]
-                not_alerted = True
-                for listing in listings:
-                    if (listing["pricePerUnit"] < min_price or listing["pricePerUnit"] > max_price) and not_alerted:
-                        new_alert = {}
-                        new_alert["item_name"] = alert["item_name"]
-                        new_alert["pricePerUnit"] = listing["pricePerUnit"]
-                        new_alert["source"] = source
-                        new_alert["direction"] = "over" if listing["pricePerUnit"] > max_price else "under" if listing["pricePerUnit"] < min_price else "the same as"
-                        triggered_alerts.append(new_alert)
-                        not_alerted = False
+                listing_to_alert = None
+                l_price = sys.maxsize
+                if listings is not None:
+                    for listing in listings:
+                        # find listing with lowest price.
+                        if listing["pricePerUnit"] < l_price:
+                            if require_HQ:
+                                if listing["hq"]:
+                                    l_price = listing["pricePerUnit"]
+                                    listing_to_alert = listing
+                            else:
+                                l_price = listing["pricePerUnit"]
+                                listing_to_alert = listing
+                if listing_to_alert is not None and (listing_to_alert["pricePerUnit"] < min_price or listing_to_alert["pricePerUnit"] > max_price):
+                    new_alert = {}
+                    new_alert["item_name"] = alert["item_name"]
+                    new_alert["pricePerUnit"] = listing_to_alert["pricePerUnit"]
+                    new_alert["source"] = source
+                    new_alert["direction"] = "over" if listing_to_alert["pricePerUnit"] > max_price else "under" if listing_to_alert["pricePerUnit"] < min_price else "the same as"
+                    new_alert["targetPrice"] = max_price if listing_to_alert["pricePerUnit"] > max_price else min_price if listing_to_alert["pricePerUnit"] < min_price else listing_to_alert["pricePerUnit"]
+                    triggered_alerts.append(new_alert)
                     
         return triggered_alerts
     except Exception as e:

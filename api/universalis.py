@@ -110,20 +110,14 @@ def get_price_history(item_id, location, days=7):
             stats_within = days * 24 * 60 * 60 * 1000
             query_params.append(f"statsWithin={stats_within}")
             query_params.append(f"entriesWithin={stats_within}")
-            print(f"Requesting data for the last {days} days (entriesWithin=statsWithin={stats_within})")
         
         # Combine base URL and query parameters
         url = base_url
         if query_params:
             url = f"{base_url}?{'&'.join(query_params)}"
         
-        # Print the full URL for debugging
-        print(f"Fetching price history from: {url}")
-        
         # Make the request
         response = requests.get(url, timeout=10)
-        
-        print(f"Response status code: {response.status_code}")
         
         if response.status_code == 200:
             history_data = response.json()
