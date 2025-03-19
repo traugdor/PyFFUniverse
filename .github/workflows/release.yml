@@ -1,0 +1,103 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      should_release: ${{ steps.get-version.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Get version from commit message
+        id: get-version
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ $COMMIT_MSG =~ v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION=${BASH_REMATCH[0]}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-latest
+            output_name: PyFFUniverse-Windows
+            asset_name: PyFFUniverse-Windows.zip
+          - os: ubuntu-latest
+            output_name: PyFFUniverse-Linux
+            asset_name: PyFFUniverse-Linux.zip
+          - os: macos-latest
+            output_name: PyFFUniverse-macOS
+            asset_name: PyFFUniverse-macOS.zip
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --onefile --windowed --name ${{ matrix.output_name }} main.py
+      
+      - name: Zip artifacts
+        run: |
+          cd dist
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            7z a -tzip ../${{ matrix.asset_name }} ${{ matrix.output_name }}.exe
+          else
+            zip ../${{ matrix.asset_name }} ${{ matrix.output_name }}
+          fi
+          cd ..
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+
+  release:
+    needs: [check-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.check-version.outputs.version }}
+          name: Release ${{ needs.check-version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            PyFFUniverse-Windows.zip/PyFFUniverse-Windows.zip
+            PyFFUniverse-Linux.zip/PyFFUniverse-Linux.zip
+            PyFFUniverse-macOS.zip/PyFFUniverse-macOS.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
