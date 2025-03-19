@@ -4,6 +4,7 @@ import statistics
 import os
 import tkinter as tk
 from api.universalis import UNIVERSALIS_BASE_URL
+from api.xivapi import get_item_details
 
 # Custom print function
 def custom_print(text):
@@ -92,7 +93,7 @@ def get_world_data_in_dc(item_id, data_center):
         print(f"Error fetching world data: {e}")
         return {}
 
-def get_lowest_price_in_dc(world_data, current_world=None):
+def get_lowest_price_in_dc(world_data, current_world=None, require_HQ=False):
     # Find the world with the lowest price
     lowest_price = float('inf')
     lowest_price_world = None
@@ -101,7 +102,16 @@ def get_lowest_price_in_dc(world_data, current_world=None):
         if world == current_world or not data.get("listings"):
             continue
             
-        world_price = data["listings"][0]["pricePerUnit"]
+        ## if require_HQ is True, only consider HQ listings
+        filter_listings = [];
+        if require_HQ:
+            # print(f"filtering listings to only HQ items for {current_world}")
+            filter_listings = [listing for listing in data.get("listings", []) if listing.get("hq")]
+        else:
+            filter_listings = data.get("listings", [])
+        
+        # find lowest price from filtered listings
+        world_price = min(filter_listings, key=lambda x: x["pricePerUnit"])["pricePerUnit"]
         
         if world_price < lowest_price:
             lowest_price = world_price
@@ -124,6 +134,10 @@ def find_arbitrage_opportunities(item_id, current_world, data_center):
     try:
         # Get market data for all worlds in the data center
         world_data = get_world_data_in_dc(item_id, data_center)
+        item_details = get_item_details(item_id)
+        require_HQ = False
+        if item_details and "CanBeHq" in item_details:
+            require_HQ = item_details["CanBeHq"] == 1 # require HQ if it can be HQ
 
         # Handle current_world = "All"
         if current_world == "All":
@@ -135,7 +149,18 @@ def find_arbitrage_opportunities(item_id, current_world, data_center):
             return None
             
         current_world_price = current_world_data["listings"][0]["pricePerUnit"]
-        current_dc_lowest_price, current_dc_lowest_price_world = get_lowest_price_in_dc(world_data, current_world)
+        ## if require_HQ is True, only consider HQ listings
+        filter_listings = [];
+        if require_HQ:
+            print("filtering listings to only HQ items")
+            filter_listings = [listing for listing in current_world_data.get("listings", []) if listing.get("hq")]
+        else:
+            filter_listings = current_world_data.get("listings", [])
+        
+        # find lowest price from filtered listings
+        current_world_price = min(filter_listings, key=lambda x: x["pricePerUnit"])["pricePerUnit"]
+
+        current_dc_lowest_price, current_dc_lowest_price_world = get_lowest_price_in_dc(world_data, current_world, require_HQ)
         #custom_print(f"Current world: {current_world}, Current price: {current_world_price}, DC lowest price: {current_dc_lowest_price}, DC lowest price world: {current_dc_lowest_price_world}")
 
         dc_data = {}
