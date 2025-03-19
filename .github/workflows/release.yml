@@ -22,8 +22,10 @@ jobs:
           # More flexible regex that allows for alpha/beta suffixes
           if [[ $COMMIT_MSG =~ v[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*([a-zA-Z0-9-]+)* ]]; then
             VERSION=${BASH_REMATCH[0]}
+            # Replace spaces with hyphens for a valid tag name
+            TAG_VERSION=$(echo "$VERSION" | tr ' ' '-')
             echo "Found version: $VERSION"
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "version=$TAG_VERSION" >> $GITHUB_OUTPUT
             echo "should_release=true" >> $GITHUB_OUTPUT
           else
             echo "No version found in commit message"
@@ -96,11 +98,14 @@ jobs:
       
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: artifacts
       
       - name: List downloaded artifacts
-        run: ls -la
+        run: ls -la artifacts
       
-      - name: Create Release
+      - name: Create GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.check-version.outputs.version }}
@@ -108,8 +113,8 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            PyFFUniverse-Windows.zip
-            PyFFUniverse-Linux.zip
-            PyFFUniverse-macOS.zip
+            artifacts/PyFFUniverse-Windows.zip/PyFFUniverse-Windows.zip
+            artifacts/PyFFUniverse-Linux.zip/PyFFUniverse-Linux.zip
+            artifacts/PyFFUniverse-macOS.zip/PyFFUniverse-macOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
