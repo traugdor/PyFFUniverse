@@ -20,11 +20,18 @@ from utils.data_processing import create_item_dictionary, filter_items_by_search
 from utils.graph_utils import create_price_history_graph, get_time_range_days, create_chart_tooltip
 from utils.discord_webhook import send_discord_alert, save_discord_settings, load_discord_settings
 from plyer import notification
-from win10toast import ToastNotifier
-from win11toast import toast as ToastNotifier11
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+# Only import Windows-specific modules on Windows
+if sys.platform == "win32":
+    try:
+        from win10toast import ToastNotifier
+        from win11toast import toast as ToastNotifier11
+    except ImportError:
+        # Handle case where Windows-specific modules aren't available
+        pass
 
 def check_os():
     if sys.platform == "win32":
@@ -1254,27 +1261,37 @@ class PyFFUniverseApp:
 
 import platform
 
-if check_os() not in ["Linux","macOS"]:
-    version_info = platform.version()
-    major_version = int(version_info.split('.')[0])
+if check_os() == "Windows":
+    # Check if Windows-specific modules were successfully imported
+    if 'ToastNotifier' in globals() and 'ToastNotifier11' in globals():
+        version_info = platform.version()
+        major_version = int(version_info.split('.')[0])
 
-    if major_version == 10:
-        class MyToastNotifier(ToastNotifier):
-            def __init__(self):
-                super().__init__()
+        if major_version == 10:
+            class MyToastNotifier(ToastNotifier):
+                def __init__(self):
+                    super().__init__()
 
-            def on_destroy(self, hwnd, msg, wparam, lparam):
-                super().on_destroy(hwnd, msg, wparam, lparam)
-                return 0
-    elif major_version == 11:
-        class MyToastNotifier(ToastNotifier11):
-            def __init__(self):
-                super().__init__()
+                def on_destroy(self, hwnd, msg, wparam, lparam):
+                    super().on_destroy(hwnd, msg, wparam, lparam)
+                    return 0
+        elif major_version == 11:
+            class MyToastNotifier(ToastNotifier11):
+                def __init__(self):
+                    super().__init__()
 
-            def on_destroy(self, hwnd, msg, wparam, lparam):
-                super().on_destroy(hwnd, msg, wparam, lparam)
-                return 0
+                def on_destroy(self, hwnd, msg, wparam, lparam):
+                    super().on_destroy(hwnd, msg, wparam, lparam)
+                    return 0
+        else:
+            class MyToastNotifier():
+                def __init__(self):
+                    pass
+                
+                def show_toast(self, title, message, duration=10, app_name="PyFFUniverse", toast_icon=None, toast_duration="short", toast_duration_type="short"):
+                    messagebox.showinfo(title, message)
     else:
+        # Windows-specific modules not available
         class MyToastNotifier():
             def __init__(self):
                 pass

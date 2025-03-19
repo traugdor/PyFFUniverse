@@ -1,0 +1,6 @@
+plyer
+matplotlib
+numpy
+scipy
+scikit-learn
+Pillow
