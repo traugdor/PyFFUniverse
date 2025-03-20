@@ -1,5 +1,6 @@
 import json
 import requests
+from utils.settings import load_settings
 
 def get_item_names(item_ids, language = None):
 
@@ -59,10 +60,8 @@ def create_item_dictionary(marketable_ids):
     """
     # Get item names using selected language
     # read language from settings.json
-    language = None
-    with open("settings.json", "r") as f:
-        settings = json.load(f)
-        lang_code = settings["lang_code"]
+    settings = load_settings()
+    lang_code = settings["lang_code"]
     item_names = get_item_names(marketable_ids, lang_code)
     
     # Create the item dictionary as a list of [id, name] pairs

@@ -83,9 +83,12 @@ OR
 
 You can find the last saved application settings in the `settings.json` file:
 - `language`: Set your preferred language ("English", "Deutsch", "Français", or "日本語")
-- `lang_code`: Set your preferred language code ("en", "de", "fr", or "jp")
+- `lang_code`: Set your preferred language code ("en", "de", "fr", or "ja")
 - `data_center`: Set your default data center
 - `world`: Set your default world
+- `discord_webhook_url`: Set your Discord webhook URL for notifications
+
+The settings are automatically saved when you use the application, but if you want to configure it manually, you can edit the `settings.json` file yourself, before running the application for the first time.
 
 ## Roadmap / TODO
 
@@ -97,8 +100,8 @@ You can find the last saved application settings in the `settings.json` file:
 - [ ] Improve Universalis API integration efficiency
 
 ### Medium-term Goals
-- [ ] Create a dashboard view with summary of all alerts and opportunities **(WIP)**
-- [ ] Implement historical price charts and trend analysis
+- [X] Create a dashboard view with summary of all alerts and opportunities
+- [ ] Implement historical price charts and trend analysis **(WIP)**
 - [ ] Develop a recommendation system for potentially profitable items
 
 ### Long-term Goals

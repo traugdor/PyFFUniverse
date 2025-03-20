@@ -68,8 +68,65 @@ jobs:
           pip install -r ${{ matrix.req_file }}
       
       - name: Build with PyInstaller
+        shell: bash
         run: |
-          pyinstaller --onefile --windowed --name ${{ matrix.output_name }} main.py
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            pyinstaller --onefile --windowed --name ${{ matrix.output_name }} \
+              --add-data="settings.json;." \
+              --add-data="alerts.json;." \
+              --hidden-import=requests \
+              --hidden-import=json \
+              --hidden-import=datetime \
+              --hidden-import=threading \
+              --hidden-import=time \
+              --hidden-import=sys \
+              --hidden-import=api.xivapi \
+              --hidden-import=api.universalis \
+              --hidden-import=ui.item_frame \
+              --hidden-import=ui.item_list \
+              --hidden-import=ui.market_frame \
+              --hidden-import=utils.alerts \
+              --hidden-import=utils.market_analysis \
+              --hidden-import=utils.translations \
+              --hidden-import=utils.translation_widgets \
+              --hidden-import=utils.settings \
+              --hidden-import=utils.data_processing \
+              --hidden-import=utils.graph_utils \
+              --hidden-import=utils.discord_webhook \
+              --hidden-import=plyer \
+              --hidden-import=matplotlib \
+              --hidden-import=matplotlib.figure \
+              --hidden-import=matplotlib.backends.backend_tkagg \
+              main.py
+          else
+            pyinstaller --onefile --windowed --name ${{ matrix.output_name }} \
+              --add-data="settings.json:." \
+              --add-data="alerts.json:." \
+              --hidden-import=requests \
+              --hidden-import=json \
+              --hidden-import=datetime \
+              --hidden-import=threading \
+              --hidden-import=time \
+              --hidden-import=sys \
+              --hidden-import=api.xivapi \
+              --hidden-import=api.universalis \
+              --hidden-import=ui.item_frame \
+              --hidden-import=ui.item_list \
+              --hidden-import=ui.market_frame \
+              --hidden-import=utils.alerts \
+              --hidden-import=utils.market_analysis \
+              --hidden-import=utils.translations \
+              --hidden-import=utils.translation_widgets \
+              --hidden-import=utils.settings \
+              --hidden-import=utils.data_processing \
+              --hidden-import=utils.graph_utils \
+              --hidden-import=utils.discord_webhook \
+              --hidden-import=plyer \
+              --hidden-import=matplotlib \
+              --hidden-import=matplotlib.figure \
+              --hidden-import=matplotlib.backends.backend_tkagg \
+              main.py
+          fi
       
       - name: Zip artifacts
         shell: bash
@@ -112,6 +169,7 @@ jobs:
           name: Release ${{ needs.check-version.outputs.version }}
           draft: false
           prerelease: false
+          generate_release_notes: true
           files: |
             artifacts/PyFFUniverse-Windows.zip/PyFFUniverse-Windows.zip
             artifacts/PyFFUniverse-Linux.zip/PyFFUniverse-Linux.zip
