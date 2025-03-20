@@ -1,5 +1,7 @@
 # PyFFUniverse
 
+![Build Status](https://github.com/traugdor/PyFFUniverse/actions/workflows/release.yml/badge.svg)
+
 PyFFUniverse is a comprehensive market data analysis tool for Final Fantasy XIV Online. It allows players to track market prices across different worlds and data centers, set price alerts, identify hot items, and find arbitrage opportunities.
 
 ## Features
