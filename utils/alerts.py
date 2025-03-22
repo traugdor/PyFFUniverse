@@ -21,7 +21,9 @@ def load_alerts():
             with open(ALERTS_FILE, 'r') as f:
                 return json.load(f)
         else:
-            return {}
+            alerts = {}
+            save_alerts(alerts)
+            return alerts
     except Exception as e:
         print(f"Error loading alerts: {e}")
         return {}
